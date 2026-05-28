@@ -3,12 +3,25 @@ import {
   SalaryRecord,
   insertSalaryRecords,
 } from "@/repositories/salaryRecordsRepository";
+import { generateSalarySlipPdfBuffer } from "@/services/generatePDF";
+import { sendSalarySlipEmail } from "@/services/sendEmail";
 
 type RawRow = Record<string, unknown>;
 
 type DispatchResult = {
   matchedEmployees: number;
   salaryRecordsInserted: number;
+  results: DispatchResultItem[];
+};
+
+type DispatchResultItem = {
+  employee_id: string;
+  name: string;
+  email: string;
+  month: number;
+  year: number;
+  success: boolean;
+  error?: string;
 };
 
 const NUMBER_FIELDS = [
@@ -91,37 +104,80 @@ export async function dispatchSalaryUpload(rows: RawRow[]) {
     throw new Error("No rows to dispatch.");
   }
 
-  const salaryRecords: SalaryRecord[] = [];
+  const parsedRows = rows.map(parseRow);
+  const salaryRecordsToInsert: SalaryRecord[] = [];
+  const results: DispatchResultItem[] = [];
 
-  const employeeIds: string[] = [];
-
-  rows.forEach((row) => {
-    const parsed = parseRow(row);
-    employeeIds.push(parsed.employee_id);
-    salaryRecords.push(parsed.salaryRecord);
-  });
-
-  const uniqueEmployeeIds = Array.from(new Set(employeeIds));
+  const uniqueEmployeeIds = Array.from(
+    new Set(parsedRows.map((parsed) => parsed.employee_id))
+  );
   const employees = await getEmployeesByIds(uniqueEmployeeIds);
   const employeeMap = new Map(
     employees.map((employee) => [employee.employee_id, employee])
   );
-  const missingEmployees = uniqueEmployeeIds.filter(
-    (employeeId) => !employeeMap.has(employeeId)
-  );
 
-  if (missingEmployees.length > 0) {
-    const sample = missingEmployees.slice(0, 8).join(", ");
-    throw new Error(
-      `Missing employees in master data: ${sample}$`
-        .replace("$", missingEmployees.length > 8 ? "..." : "")
-    );
+  const companyName = process.env.COMPANY_NAME ?? "Company";
+
+  for (const parsed of parsedRows) {
+    const employee = employeeMap.get(parsed.employee_id);
+    if (!employee) {
+      results.push({
+        employee_id: parsed.employee_id,
+        name: "",
+        email: "",
+        month: parsed.salaryRecord.month,
+        year: parsed.salaryRecord.year,
+        success: false,
+        error: "Employee not found in master data.",
+      });
+      continue;
+    }
+
+    try {
+      const pdfBuffer = await generateSalarySlipPdfBuffer({
+        companyName,
+        employee,
+        salaryRecord: parsed.salaryRecord,
+      });
+
+      await sendSalarySlipEmail({
+        to: employee.email,
+        name: employee.name,
+        month: parsed.salaryRecord.month,
+        year: parsed.salaryRecord.year,
+        pdfBuffer,
+      });
+
+      salaryRecordsToInsert.push(parsed.salaryRecord);
+      results.push({
+        employee_id: employee.employee_id,
+        name: employee.name,
+        email: employee.email,
+        month: parsed.salaryRecord.month,
+        year: parsed.salaryRecord.year,
+        success: true,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Dispatch failed";
+      results.push({
+        employee_id: employee.employee_id,
+        name: employee.name,
+        email: employee.email,
+        month: parsed.salaryRecord.month,
+        year: parsed.salaryRecord.year,
+        success: false,
+        error: message,
+      });
+    }
   }
 
-  const salaryRecordsInserted = await insertSalaryRecords(salaryRecords);
+  const salaryRecordsInserted = await insertSalaryRecords(
+    salaryRecordsToInsert
+  );
 
   return {
     matchedEmployees: employees.length,
     salaryRecordsInserted,
+    results,
   } satisfies DispatchResult;
 }
