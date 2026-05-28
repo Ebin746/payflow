@@ -1,0 +1,199 @@
+"use client";
+
+import { useState } from "react";
+import { Toaster, toast } from "react-hot-toast";
+
+type PreviewRow = Record<string, string | number | boolean | null>;
+
+type UploadResponse = {
+  columns: string[];
+  rows: PreviewRow[];
+  totalRows: number;
+};
+
+export default function AdminUploadPage() {
+  const [columns, setColumns] = useState<string[]>([]);
+  const [rows, setRows] = useState<PreviewRow[]>([]);
+  const [totalRows, setTotalRows] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
+
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setFileName(file.name);
+    setIsLoading(true);
+    setColumns([]);
+    setRows([]);
+    setTotalRows(0);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Upload failed");
+      }
+
+      const data = (await response.json()) as UploadResponse;
+      setColumns(data.columns);
+      setRows(data.rows);
+      setTotalRows(data.totalRows);
+      toast.success("File parsed successfully");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Upload failed";
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleConfirm = () => {
+    toast.success("Dispatch queued");
+  };
+
+  const hasPreview = rows.length > 0;
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <Toaster position="top-right" />
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-12">
+        <header className="flex flex-col gap-3">
+          <p className="text-sm uppercase tracking-[0.3em] text-slate-400">
+            Admin Console
+          </p>
+          <h1 className="text-3xl font-semibold text-white">
+            File Upload & Parsing
+          </h1>
+          <p className="max-w-2xl text-base text-slate-300">
+            Upload a CSV or Excel file to preview the parsed data before
+            dispatching.
+          </p>
+        </header>
+
+        <section className="rounded-2xl bg-white p-6 text-slate-900 shadow-xl shadow-slate-900/20">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-slate-700">
+                Upload file
+              </label>
+              <input
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={handleFileChange}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 file:mr-4 file:rounded-lg file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600">
+              <span>
+                {fileName ? "Selected: " + fileName : "No file selected"}
+              </span>
+              {isLoading ? (
+                <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-600">
+                  Parsing...
+                </span>
+              ) : null}
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-2xl bg-white p-6 text-slate-900 shadow-xl shadow-slate-900/20">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Preview
+                </h2>
+                <p className="text-sm text-slate-500">
+                  {hasPreview
+                    ? `Showing ${rows.length} of ${totalRows} rows`
+                    : "Upload a file to see a preview"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={!hasPreview}
+                className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+              >
+                Confirm & Dispatch
+              </button>
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-slate-200">
+              {hasPreview ? (
+                <div className="max-h-[420px] overflow-auto">
+                  <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+                    <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        {columns.map((column) => (
+                          <th key={column} className="px-4 py-3 font-semibold">
+                            {column}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {rows.map((row, rowIndex) => (
+                        <tr
+                          key={rowIndex}
+                          className={rowIndex % 2 === 0 ? "bg-white" : "bg-slate-50"}
+                        >
+                          {columns.map((column) => (
+                            <td key={column} className="px-4 py-3">
+                              {row[column] ?? "-"}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2 py-16 text-slate-400">
+                  <div className="h-10 w-10 rounded-full bg-slate-100" />
+                  <p className="text-sm">No preview available yet.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-slate-300">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                Status
+              </p>
+              <p className="text-sm">{hasPreview ? "Ready" : "Waiting"}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                Success signals
+              </p>
+              <p className="text-sm text-emerald-400">Green messages</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                Error signals
+              </p>
+              <p className="text-sm text-red-400">Red messages</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
