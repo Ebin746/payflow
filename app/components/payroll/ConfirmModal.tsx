@@ -13,6 +13,7 @@ export default function ConfirmModal({
   uploadType,
   employeeCount,
   isDispatching,
+  progressPercent,
   onCancel,
   onConfirm,
 }: ConfirmModalProps) {

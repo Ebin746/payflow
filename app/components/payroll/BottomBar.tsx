@@ -19,6 +19,7 @@ export default function BottomBar({
   missingColumnsCount,
   hasBlockingIssues,
   dispatchLocked,
+  progressPercent,
   onReupload,
   onOpenConfirm,
 }: BottomBarProps) {

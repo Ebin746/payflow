@@ -3,7 +3,7 @@
 import React from "react";
 
 type LandingProps = {
-  previewRef: React.RefObject<HTMLDivElement>;
+  previewRef: React.RefObject<HTMLDivElement | null>;
 };
 
 export default function Landing({ previewRef }: LandingProps) {
