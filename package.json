@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",
+    "muhammara": "^6.0.5",
     "next": "16.2.6",
     "nodemailer": "^6.10.1",
     "pdf-lib": "^1.17.1",

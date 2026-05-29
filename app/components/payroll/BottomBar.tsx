@@ -5,6 +5,7 @@ type BottomBarProps = {
   isDispatching: boolean;
   isLoading: boolean;
   missingColumnsCount: number;
+  hasBlockingIssues: boolean;
   dispatchLocked: boolean;
   onReupload: () => void;
   onOpenConfirm: () => void;
@@ -15,6 +16,7 @@ export default function BottomBar({
   isDispatching,
   isLoading,
   missingColumnsCount,
+  hasBlockingIssues,
   dispatchLocked,
   onReupload,
   onOpenConfirm,
@@ -23,7 +25,9 @@ export default function BottomBar({
     <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200 bg-white/90 px-6 py-4 shadow-[0_-20px_60px_-40px_rgba(15,23,42,0.6)] backdrop-blur">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <span className="text-sm text-slate-500">
-          Review the table before confirming.
+          {hasBlockingIssues
+            ? "Resolve highlighted issues before confirming."
+            : "Review the table before confirming."}
         </span>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <button
@@ -36,10 +40,18 @@ export default function BottomBar({
           {!dispatchLocked && (
             <button
               type="button"
-              disabled={missingColumnsCount > 0 || isLoading || isDispatching}
+              disabled={
+                missingColumnsCount > 0 ||
+                hasBlockingIssues ||
+                isLoading ||
+                isDispatching
+              }
               onClick={onOpenConfirm}
               className={`w-full rounded-full px-6 py-2 text-sm font-semibold text-white transition sm:w-auto ${
-                missingColumnsCount > 0 || isLoading || isDispatching
+                missingColumnsCount > 0 ||
+                hasBlockingIssues ||
+                isLoading ||
+                isDispatching
                   ? "bg-slate-400"
                   : "bg-slate-900 hover:-translate-y-0.5"
               }`}

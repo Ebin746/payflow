@@ -2,7 +2,8 @@ create table if not exists employees (
   employee_id text primary key,
   name text not null,
   email text not null,
-  designation text not null
+  designation text not null,
+  birth_year int
 );
 
 create table if not exists salary_records (

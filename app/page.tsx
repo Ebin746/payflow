@@ -6,6 +6,7 @@ import BottomBar from "@/app/components/payroll/BottomBar";
 import ConfirmModal from "@/app/components/payroll/ConfirmModal";
 import LiveDispatchPanel from "@/app/components/payroll/LiveDispatchPanel";
 import PreviewTables from "@/app/components/payroll/PreviewTables";
+import RowEditModal from "@/app/components/payroll/RowEditModal";
 
 type UploadPreview = {
   columns: string[];
@@ -42,10 +43,7 @@ type EmployeeLookupItem = EmployeeLookup & {
   employee_id: string;
 };
 
-type RemovedRow = {
-  row: Record<string, string | number | boolean | null>;
-  reason: string;
-};
+type ValidationErrors = Record<number, Record<string, string>>;
 
 const REQUIRED_COLUMNS = [
   "employee_id",
@@ -57,15 +55,6 @@ const REQUIRED_COLUMNS = [
   "year",
 ];
 
-const NUMERIC_COLUMNS = [
-  "base_salary",
-  "hra",
-  "allowances",
-  "deductions",
-  "net_salary",
-  "month",
-  "year",
-];
 
 const EMPLOYEE_REQUIRED_COLUMNS = [
   "employee_id",
@@ -108,6 +97,107 @@ function getExtension(filename: string) {
   return parts.length > 1 ? parts[parts.length - 1].toUpperCase() : "FILE";
 }
 
+function isEmptyValue(value: unknown) {
+  if (value === null || value === undefined) {
+    return true;
+  }
+  if (typeof value === "string") {
+    return value.trim() === "";
+  }
+  return false;
+}
+
+function parseNumber(value: unknown) {
+  if (typeof value === "number") {
+    return value;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return null;
+}
+
+function validateRows(
+  preview: UploadPreview | null,
+  uploadType: UploadType,
+  requiredColumns: string[]
+) {
+  if (!preview) {
+    return {} as ValidationErrors;
+  }
+
+  const errors: ValidationErrors = {};
+  const salaryNumericFields = [
+    "base_salary",
+    "hra",
+    "allowances",
+    "deductions",
+    "net_salary",
+  ];
+  const salaryIntegerFields = ["month", "year"];
+
+  preview.rows.forEach((row, rowIndex) => {
+    const rowErrors: Record<string, string> = {};
+
+    requiredColumns.forEach((column) => {
+      if (isEmptyValue(row[column])) {
+        rowErrors[column] = "Required.";
+      }
+    });
+
+    if (uploadType === "salary") {
+      salaryNumericFields.forEach((field) => {
+        if (!isEmptyValue(row[field])) {
+          const parsed = parseNumber(row[field]);
+          if (parsed === null) {
+            rowErrors[field] = "Must be a number.";
+          }
+        }
+      });
+
+      salaryIntegerFields.forEach((field) => {
+        if (!isEmptyValue(row[field])) {
+          const parsed = parseNumber(row[field]);
+          if (parsed === null || !Number.isInteger(parsed)) {
+            rowErrors[field] = "Must be an integer.";
+          }
+        }
+      });
+
+      const monthValue = parseNumber(row.month);
+      if (monthValue !== null && (monthValue < 1 || monthValue > 12)) {
+        rowErrors.month = "Must be 1-12.";
+      }
+
+      const yearValue = parseNumber(row.year);
+      if (yearValue !== null && yearValue < 1900) {
+        rowErrors.year = "Check year.";
+      }
+    }
+
+    if (uploadType === "employees") {
+      const emailValue = String(row.email ?? "").trim();
+      if (emailValue && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) {
+        rowErrors.email = "Invalid email.";
+      }
+
+      if (!isEmptyValue(row.birth_year)) {
+        const parsed = parseNumber(row.birth_year);
+        if (parsed === null || !Number.isInteger(parsed)) {
+          rowErrors.birth_year = "Must be an integer.";
+        }
+      }
+    }
+
+    if (Object.keys(rowErrors).length > 0) {
+      errors[rowIndex] = rowErrors;
+    }
+  });
+
+  return errors;
+}
+
 export default function Home() {
   const [uploadType, setUploadType] = useState<UploadType>("salary");
   const [isDragging, setIsDragging] = useState(false);
@@ -119,7 +209,6 @@ export default function Home() {
     Record<string, EmployeeLookup>
   >({});
   const [isEmployeeLookupLoading, setIsEmployeeLookupLoading] = useState(false);
-  const [removedRows, setRemovedRows] = useState<RemovedRow[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isDispatching, setIsDispatching] = useState(false);
@@ -136,6 +225,7 @@ export default function Home() {
     failed: 0,
     skipped: 0,
   });
+  const [editRowIndex, setEditRowIndex] = useState<number | null>(null);
   const [revealedCount, setRevealedCount] = useState(0);
   const [sortState, setSortState] = useState<SortState>({
     key: "employee_id",
@@ -158,6 +248,42 @@ export default function Home() {
     )}`;
   }, [requiredColumns, uploadType]);
 
+  async function fetchEmployeeLookup(employeeIds: string[]) {
+    if (employeeIds.length === 0) {
+      setEmployeeLookup({});
+      setMissingEmployees([]);
+      return;
+    }
+    setIsEmployeeLookupLoading(true);
+    try {
+      const validateResponse = await fetch("/api/employees/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeIds }),
+      });
+      const validatePayload = (await validateResponse.json()) as
+        | { missingEmployeeIds: string[]; employees: EmployeeLookupItem[] }
+        | { error: string };
+
+      if (validateResponse.ok && "employees" in validatePayload) {
+        const employees = Array.isArray(validatePayload.employees)
+          ? validatePayload.employees
+          : [];
+        const lookup: Record<string, EmployeeLookup> = {};
+        employees.forEach((employee) => {
+          lookup[employee.employee_id] = {
+            name: employee.name,
+            email: employee.email,
+          };
+        });
+        setEmployeeLookup(lookup);
+        setMissingEmployees(validatePayload.missingEmployeeIds ?? []);
+      }
+    } finally {
+      setIsEmployeeLookupLoading(false);
+    }
+  }
+
   async function handleUpload(file: File) {
     setSelectedFile(file);
     setPreview(null);
@@ -165,7 +291,6 @@ export default function Home() {
     setMissingEmployees([]);
     setEmployeeLookup({});
     setIsEmployeeLookupLoading(false);
-    setRemovedRows([]);
     setDispatchLocked(false);
     setErrorMessage(null);
     setDispatchMessage(null);
@@ -177,6 +302,7 @@ export default function Home() {
       failed: 0,
       skipped: 0,
     });
+    setEditRowIndex(null);
     setRevealedCount(0);
     setIsLoading(true);
 
@@ -201,39 +327,7 @@ export default function Home() {
 
       const previewPayload = payload as UploadPreview;
 
-      if (uploadType === "salary") {
-        const validRows: UploadPreview["rows"] = [];
-        const removed: RemovedRow[] = [];
-
-        previewPayload.rows.forEach((row) => {
-          const invalidFields = NUMERIC_COLUMNS.filter((field) => {
-            const value = row[field];
-            if (value === null || value === undefined || value === "") {
-              return false;
-            }
-            const numericValue = Number(value);
-            return Number.isNaN(numericValue);
-          });
-
-          if (invalidFields.length > 0) {
-            removed.push({
-              row,
-              reason: `Invalid number in ${invalidFields.join(", ")}`,
-            });
-          } else {
-            validRows.push(row);
-          }
-        });
-
-        setRemovedRows(removed);
-        setPreview({
-          ...previewPayload,
-          rows: validRows,
-          totalRows: validRows.length,
-        });
-      } else {
-        setPreview(previewPayload);
-      }
+      setPreview(previewPayload);
 
       const missing = requiredColumns.filter(
         (column) => !previewPayload.columns.includes(column)
@@ -245,36 +339,7 @@ export default function Home() {
           .map((row) => String(row.employee_id ?? "").trim())
           .filter(Boolean);
 
-        if (employeeIds.length > 0) {
-          setIsEmployeeLookupLoading(true);
-          try {
-            const validateResponse = await fetch("/api/employees/lookup", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ employeeIds }),
-            });
-            const validatePayload = (await validateResponse.json()) as
-              | { missingEmployeeIds: string[]; employees: EmployeeLookupItem[] }
-              | { error: string };
-
-            if (validateResponse.ok) {
-              const employees = Array.isArray(validatePayload.employees)
-                ? validatePayload.employees
-                : [];
-              const lookup: Record<string, EmployeeLookup> = {};
-              employees.forEach((employee) => {
-                lookup[employee.employee_id] = {
-                  name: employee.name,
-                  email: employee.email,
-                };
-              });
-              setEmployeeLookup(lookup);
-              setMissingEmployees(validatePayload.missingEmployeeIds ?? []);
-            }
-          } finally {
-            setIsEmployeeLookupLoading(false);
-          }
-        }
+        await fetchEmployeeLookup(employeeIds);
       }
 
       requestAnimationFrame(() => {
@@ -304,7 +369,10 @@ export default function Home() {
   }
 
   async function handleDispatch() {
-    if (!preview || missingColumns.length > 0 || isDispatching) {
+    if (!preview || hasBlockingIssues || isDispatching) {
+      if (hasBlockingIssues) {
+        setErrorMessage("Resolve validation issues before dispatch.");
+      }
       return;
     }
 
@@ -337,8 +405,9 @@ export default function Home() {
           throw new Error(message);
         }
 
+        const upsertedCount = "employeesUpserted" in payload ? (payload.employeesUpserted ?? 0) : 0;
         setDispatchMessage(
-          `Employee upload complete. ${payload.employeesUpserted ?? 0} records saved.`
+          `Employee upload complete. ${upsertedCount} records saved.`
         );
         return;
       }
@@ -462,6 +531,7 @@ export default function Home() {
     if (file) {
       void handleUpload(file);
     }
+    event.target.value = "";
   }
 
   function handleDrop(event: React.DragEvent<HTMLDivElement>) {
@@ -489,6 +559,7 @@ export default function Home() {
       skipped: 0,
     });
     setRevealedCount(0);
+    setEditRowIndex(null);
     setIsLoading(false);
     setIsDispatching(false);
     setShowConfirmModal(false);
@@ -523,6 +594,19 @@ export default function Home() {
       : Math.round(
           (dispatchProgress.processed / dispatchProgress.total) * 100
         );
+  const editColumns =
+    uploadType === "salary"
+      ? [
+          "employee_id",
+          "base_salary",
+          "hra",
+          "allowances",
+          "deductions",
+          "net_salary",
+          "month",
+          "year",
+        ]
+      : preview?.columns ?? [];
 
   function handleDownloadReport() {
     if (dispatchResults.length === 0) {
@@ -580,8 +664,28 @@ export default function Home() {
     );
   }, [missingEmployees, rowEmployeeIdSet, uploadType]);
 
+  const validationErrors = useMemo(
+    () => validateRows(preview, uploadType, requiredColumns),
+    [preview, uploadType, requiredColumns]
+  );
+
+  const validationErrorCount = useMemo(
+    () =>
+      Object.values(validationErrors).reduce(
+        (total, rowErrors) => total + Object.keys(rowErrors).length,
+        0
+      ),
+    [validationErrors]
+  );
+
   const warningCountForPreview =
-    uploadType === "salary" ? missingEmployeeSet.size : 0;
+    (uploadType === "salary" ? missingEmployeeSet.size : 0) +
+    validationErrorCount;
+
+  const hasBlockingIssues =
+    missingColumns.length > 0 ||
+    validationErrorCount > 0 ||
+    (uploadType === "salary" && missingEmployeeSet.size > 0);
 
   const sortedRows = useMemo(() => {
     if (!preview) {
@@ -637,25 +741,55 @@ export default function Home() {
   }, [preview, sortState, employeeLookup]);
 
   function handleRemoveRow(rowIndex: number) {
-    let removedRow: UploadPreview["rows"][number] | undefined;
-
     setPreview((current) => {
       if (!current) {
         return current;
       }
-      removedRow = current.rows[rowIndex];
       const nextRows = current.rows.filter((_, index) => index !== rowIndex);
       setDispatchLocked(false);
       return { ...current, rows: nextRows, totalRows: nextRows.length };
     });
-
-    if (removedRow) {
-      setRemovedRows((previous) => [
-        { row: removedRow, reason: "Removed manually" },
-        ...previous,
-      ]);
-    }
   }
+
+  function handleEditRow(rowIndex: number) {
+    setEditRowIndex(rowIndex);
+  }
+
+  function handleSaveRow(
+    rowIndex: number,
+    updatedRow: Record<string, string>
+  ) {
+    setPreview((current) => {
+      if (!current) {
+        return current;
+      }
+      const nextRows = current.rows.map((row, index) => {
+        if (index !== rowIndex) {
+          return row;
+        }
+        return { ...row, ...updatedRow };
+      });
+      setDispatchLocked(false);
+      return { ...current, rows: nextRows, totalRows: nextRows.length };
+    });
+    setEditRowIndex(null);
+  }
+
+  useEffect(() => {
+    if (!preview || uploadType !== "salary" || missingColumns.length > 0) {
+      return;
+    }
+
+    const employeeIds = preview.rows
+      .map((row) => String(row.employee_id ?? "").trim())
+      .filter(Boolean);
+
+    const timeoutId = window.setTimeout(() => {
+      void fetchEmployeeLookup(employeeIds);
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [preview, uploadType, missingColumns.length]);
 
   useEffect(() => {
     if (dispatchResults.length === 0) {
@@ -679,7 +813,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(252,252,250,1)_0%,_rgba(240,243,248,1)_45%,_rgba(230,236,244,1)_100%)]">
       <div
-        className={`mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-12 lg:px-10 ${
+        className={`mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-12 lg:px-10 overflow-x-hidden ${
           preview ? "pb-32" : ""
         }`}
       >
@@ -700,6 +834,23 @@ export default function Home() {
           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700 shadow-sm">
             <span className="font-semibold">Missing columns:</span>{" "}
             {missingColumns.join(", ")}
+          </div>
+        )}
+
+        {validationErrorCount > 0 && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 shadow-sm">
+            {validationErrorCount} validation issue
+            {validationErrorCount === 1 ? "" : "s"} found. Fix the highlighted
+            fields before dispatch.
+          </div>
+        )}
+
+        {uploadType === "salary" && missingEmployeeSet.size > 0 && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 shadow-sm">
+            {missingEmployeeSet.size} employee
+            {missingEmployeeSet.size === 1 ? " is" : "s are"} missing from the
+            master list and will be skipped. Add them or fix the IDs before
+            dispatch.
           </div>
         )}
 
@@ -896,7 +1047,7 @@ export default function Home() {
 
         <section
           ref={previewRef}
-          className={`grid gap-6 ${
+          className={`grid gap-6 min-w-0 ${
             showLivePanel
               ? "lg:grid-cols-[minmax(0,1fr)_360px]"
               : "lg:grid-cols-1"
@@ -913,9 +1064,10 @@ export default function Home() {
             sortState={sortState}
             employeeLookup={employeeLookup}
             missingEmployeeSet={missingEmployeeSet}
-            removedRows={removedRows}
+            validationErrors={validationErrors}
             onSort={handleSort}
             onRemoveRow={handleRemoveRow}
+            onEditRow={handleEditRow}
           />
 
           {showLivePanel && (
@@ -943,6 +1095,7 @@ export default function Home() {
           isDispatching={isDispatching}
           isLoading={isLoading}
           missingColumnsCount={missingColumns.length}
+          hasBlockingIssues={hasBlockingIssues}
           dispatchLocked={dispatchLocked}
           onReupload={handleReupload}
           onOpenConfirm={() => setShowConfirmModal(true)}
@@ -958,6 +1111,20 @@ export default function Home() {
           onConfirm={handleDispatch}
         />
       )}
+
+      <RowEditModal
+        isOpen={editRowIndex !== null}
+        rowIndex={editRowIndex}
+        columns={editColumns}
+        row={
+          editRowIndex !== null && preview
+            ? preview.rows[editRowIndex]
+            : null
+        }
+        nonEditableColumns={["employee_id", "name", "email"]}
+        onCancel={() => setEditRowIndex(null)}
+        onSave={handleSaveRow}
+      />
 
       {isDispatching && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/15">

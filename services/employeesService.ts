@@ -16,12 +16,24 @@ function toStringValue(value: unknown, field: string) {
   return String(value).trim();
 }
 
+function toOptionalInt(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const parsed = Number(value);
+  if (Number.isNaN(parsed) || !Number.isInteger(parsed)) {
+    return null;
+  }
+  return parsed;
+}
+
 function parseRow(row: RawRow): Employee {
   return {
     employee_id: toStringValue(row.employee_id, "employee_id"),
     name: toStringValue(row.name, "name"),
     email: toStringValue(row.email, "email"),
     designation: toStringValue(row.designation, "designation"),
+    birth_year: toOptionalInt(row.birth_year),
   };
 }
 

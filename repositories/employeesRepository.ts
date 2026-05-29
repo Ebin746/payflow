@@ -5,6 +5,7 @@ export type Employee = {
   name: string;
   email: string;
   designation: string;
+  birth_year: number | null;
 };
 
 export async function upsertEmployees(employees: Employee[]) {
@@ -31,7 +32,7 @@ export async function getEmployeesByIds(employeeIds: string[]) {
 
   const { data, error } = await supabaseAdmin
     .from("employees")
-    .select("employee_id,name,email,designation")
+    .select("employee_id,name,email,designation,birth_year")
     .in("employee_id", employeeIds);
 
   if (error) {
