@@ -15,6 +15,12 @@ export async function POST(request: Request) {
 
     const result = await dispatchSalaryUpload(rows);
 
+    console.log("dispatch result", {
+      matchedEmployees: result.matchedEmployees,
+      salaryRecordsInserted: result.salaryRecordsInserted,
+      resultsCount: result.results.length,
+    });
+
     return NextResponse.json({
       matchedEmployees: result.matchedEmployees,
       salaryRecordsInserted: result.salaryRecordsInserted,

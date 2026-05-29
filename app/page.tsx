@@ -1,12 +1,24 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type UploadPreview = {
   columns: string[];
   rows: Record<string, string | number | boolean | null>[];
   totalRows: number;
 };
+
+type DispatchResultItem = {
+  employee_id: string;
+  name: string;
+  email: string;
+  month: number;
+  year: number;
+  success: boolean;
+  error?: string;
+};
+
+type UploadType = "salary" | "employees";
 
 const REQUIRED_COLUMNS = [
   "employee_id",
@@ -16,6 +28,13 @@ const REQUIRED_COLUMNS = [
   "deductions",
   "month",
   "year",
+];
+
+const EMPLOYEE_REQUIRED_COLUMNS = [
+  "employee_id",
+  "name",
+  "email",
+  "designation",
 ];
 
 const TABLE_COLUMNS = [
@@ -51,6 +70,7 @@ function getExtension(filename: string) {
 }
 
 export default function Home() {
+  const [uploadType, setUploadType] = useState<UploadType>("salary");
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<UploadPreview | null>(null);
@@ -61,19 +81,31 @@ export default function Home() {
   const [isDispatching, setIsDispatching] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [dispatchMessage, setDispatchMessage] = useState<string | null>(null);
+  const [dispatchResults, setDispatchResults] = useState<DispatchResultItem[]>(
+    []
+  );
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [revealedCount, setRevealedCount] = useState(0);
   const [sortState, setSortState] = useState<SortState>({
     key: "employee_id",
     direction: "asc",
   });
   const previewRef = useRef<HTMLDivElement>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
+
+  const requiredColumns =
+    uploadType === "employees" ? EMPLOYEE_REQUIRED_COLUMNS : REQUIRED_COLUMNS;
 
   const sampleCsv = useMemo(() => {
-    const header = REQUIRED_COLUMNS.join(",");
-    const sampleRow = "EMP001,60000,12000,3000,1500,5,2026";
+    const header = requiredColumns.join(",");
+    const sampleRow =
+      uploadType === "employees"
+        ? "EMP001,Jordan Lee,jordan.lee@payflow.com,Accountant"
+        : "EMP001,60000,12000,3000,1500,5,2026";
     return `data:text/csv;charset=utf-8,${encodeURIComponent(
       `${header}\n${sampleRow}`
     )}`;
-  }, []);
+  }, [requiredColumns, uploadType]);
 
   async function handleUpload(file: File) {
     setSelectedFile(file);
@@ -82,6 +114,9 @@ export default function Home() {
     setMissingEmployees([]);
     setErrorMessage(null);
     setDispatchMessage(null);
+    setDispatchResults([]);
+    setExpandedRows(new Set());
+    setRevealedCount(0);
     setIsLoading(true);
 
     try {
@@ -106,12 +141,12 @@ export default function Home() {
       const previewPayload = payload as UploadPreview;
       setPreview(previewPayload);
 
-      const missing = REQUIRED_COLUMNS.filter(
+      const missing = requiredColumns.filter(
         (column) => !previewPayload.columns.includes(column)
       );
       setMissingColumns(missing);
 
-      if (missing.length === 0) {
+      if (missing.length === 0 && uploadType === "salary") {
         const employeeIds = previewPayload.rows
           .map((row) => String(row.employee_id ?? "").trim())
           .filter(Boolean);
@@ -167,24 +202,45 @@ export default function Home() {
     setDispatchMessage(null);
 
     try {
-      const response = await fetch("/api/dispatch", {
+      const endpoint =
+        uploadType === "employees" ? "/api/employees" : "/api/dispatch";
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rows: preview.rows }),
       });
       const payload = (await response.json()) as
-        | { matchedEmployees: number; results: { success: boolean }[] }
+        | {
+            matchedEmployees?: number;
+            results?: DispatchResultItem[];
+            employeesUpserted?: number;
+          }
         | { error: string };
+
+      console.log("dispatch response", payload);
 
       if (!response.ok) {
         const message = "error" in payload ? payload.error : "Dispatch failed";
         throw new Error(message);
       }
 
-      const successCount = payload.results.filter((item) => item.success).length;
-      setDispatchMessage(
-        `Dispatch complete. ${successCount} sent, ${payload.results.length - successCount} failed.`
-      );
+      if (uploadType === "employees") {
+        setDispatchResults([]);
+        setDispatchMessage(
+          `Employee upload complete. ${payload.employeesUpserted ?? 0} records saved.`
+        );
+      } else {
+        if (!payload.results) {
+          throw new Error("Dispatch response missing results.");
+        }
+
+        setDispatchResults(payload.results);
+        const successCount = payload.results.filter((item) => item.success).length;
+        setDispatchMessage(
+          `Dispatch complete. ${successCount} sent, ${payload.results.length - successCount} failed.`
+        );
+      }
+
     } catch (error) {
       const message = error instanceof Error ? error.message : "Dispatch failed";
       setDispatchMessage(message);
@@ -217,6 +273,9 @@ export default function Home() {
     setMissingEmployees([]);
     setErrorMessage(null);
     setDispatchMessage(null);
+    setDispatchResults([]);
+    setExpandedRows(new Set());
+    setRevealedCount(0);
     setIsLoading(false);
     setIsDispatching(false);
     setShowConfirmModal(false);
@@ -225,9 +284,74 @@ export default function Home() {
     });
   }
 
+  function handleUploadTypeChange(type: UploadType) {
+    if (type === uploadType) {
+      return;
+    }
+    setUploadType(type);
+    handleReupload();
+  }
+
   const extension = selectedFile ? getExtension(selectedFile.name) : "";
-  const warningCount = missingEmployees.length;
+  const warningCount = uploadType === "salary" ? missingEmployees.length : 0;
   const employeeCount = preview?.rows.length ?? 0;
+  const totalResults = dispatchResults.length;
+  const sentCount = dispatchResults.filter((item) => item.success).length;
+  const failedCount = dispatchResults.filter((item) => !item.success).length;
+  const skippedCount = dispatchResults.filter(
+    (item) => !item.success && item.error?.includes("not found")
+  ).length;
+  const allSent = totalResults > 0 && failedCount === 0;
+  const showLivePanel =
+    uploadType === "salary" && (isDispatching || dispatchResults.length > 0);
+
+  function handleDownloadReport() {
+    if (dispatchResults.length === 0) {
+      return;
+    }
+    const header = ["employee_id", "name", "email", "status", "reason"];
+    const rows = dispatchResults.map((item) => [
+      item.employee_id,
+      item.name,
+      item.email,
+      item.success
+        ? "Sent"
+        : item.error?.includes("not found")
+          ? "Skipped"
+          : "Failed",
+      item.error ?? "",
+    ]);
+    const csv = [header, ...rows]
+      .map((row) =>
+        row
+          .map((value) =>
+            `"${String(value ?? "").replace(/"/g, '""')}"`
+          )
+          .join(",")
+      )
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "dispatch-report.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function toggleExpandedRow(key: string) {
+    setExpandedRows((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
 
   const missingEmployeeSet = useMemo(
     () => new Set(missingEmployees),
@@ -281,6 +405,26 @@ export default function Home() {
     return rowsCopy;
   }, [preview, sortState]);
 
+  useEffect(() => {
+    if (dispatchResults.length === 0) {
+      setRevealedCount(0);
+      return;
+    }
+
+    setRevealedCount(0);
+    const intervalId = window.setInterval(() => {
+      setRevealedCount((current) => {
+        if (current >= dispatchResults.length) {
+          window.clearInterval(intervalId);
+          return current;
+        }
+        return current + 1;
+      });
+    }, 220);
+
+    return () => window.clearInterval(intervalId);
+  }, [dispatchResults]);
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(252,252,250,1)_0%,_rgba(240,243,248,1)_45%,_rgba(230,236,244,1)_100%)]">
       <div
@@ -293,11 +437,11 @@ export default function Home() {
             Payroll Console
           </p>
           <h1 className="text-3xl font-display font-semibold tracking-tight text-slate-900 sm:text-4xl">
-            Upload salary sheet, validate, and preview slips
+            Upload payroll data, validate, and preview slips
           </h1>
           <p className="max-w-2xl text-base text-slate-600">
-            Drag in your salary workbook to validate columns, inspect the
-            preview table, and confirm dispatch only when everything checks out.
+            Drag in your payroll workbook to validate columns, inspect the
+            preview table, and confirm only when everything checks out.
           </p>
         </header>
 
@@ -333,6 +477,41 @@ export default function Home() {
                 </p>
               </div>
 
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                  Upload type
+                </p>
+                <div className="mt-3 flex flex-col gap-2">
+                  {(["employees", "salary"] as UploadType[]).map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => handleUploadTypeChange(type)}
+                      className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm transition ${
+                        uploadType === type
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                      }`}
+                    >
+                      <span className="font-semibold">
+                        {type === "employees"
+                          ? "Employee master"
+                          : "Salary dispatch"}
+                      </span>
+                      <span
+                        className={`text-xs ${
+                          uploadType === type ? "text-slate-200" : "text-slate-400"
+                        }`}
+                      >
+                        {type === "employees"
+                          ? "One-time master upload"
+                          : "Monthly payroll file"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <details className="group rounded-2xl border border-slate-200 bg-white px-4 py-3">
                 <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-slate-700">
                   Expected format
@@ -342,7 +521,7 @@ export default function Home() {
                 </summary>
                 <div className="mt-3 flex flex-col gap-3 text-sm text-slate-600">
                   <div className="flex flex-wrap gap-2">
-                    {REQUIRED_COLUMNS.map((column) => (
+                    {requiredColumns.map((column) => (
                       <span
                         key={column}
                         className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700"
@@ -363,8 +542,9 @@ export default function Home() {
               </details>
 
               <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 p-4 text-xs text-slate-500">
-                Tip: Keep the salary slip columns in lowercase and avoid empty
-                header rows.
+                {uploadType === "employees"
+                  ? "Tip: Keep employee columns in lowercase and avoid empty header rows."
+                  : "Tip: Keep the salary slip columns in lowercase and avoid empty header rows."}
               </div>
             </div>
           </div>
@@ -409,7 +589,7 @@ export default function Home() {
               </div>
               <div>
                 <p className="text-base font-semibold text-slate-900">
-                  Drag & drop your salary file
+                  Drag & drop your {uploadType === "employees" ? "employee" : "salary"} file
                 </p>
                 <p className="text-sm text-slate-500">
                   or click to browse
@@ -463,108 +643,271 @@ export default function Home() {
           </div>
         </section>
 
-        <section ref={previewRef} className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-display font-semibold text-slate-900">
-              Preview table
-            </h2>
-            {preview && (
-              <span className="text-sm text-slate-500">
-                {employeeCount} employees found · {warningCount} warning
-                {warningCount === 1 ? "" : "s"}
-              </span>
-            )}
-          </div>
+        <section
+          ref={previewRef}
+          className={`grid gap-6 ${
+            showLivePanel ? "lg:grid-cols-[1.4fr_0.9fr]" : "lg:grid-cols-1"
+          }`}
+        >
+          <div className="space-y-4 transition-all duration-500">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-xl font-display font-semibold text-slate-900">
+                Preview table
+              </h2>
+              {preview && (
+                <span className="text-sm text-slate-500">
+                  {employeeCount} rows · {warningCount} warning
+                  {warningCount === 1 ? "" : "s"}
+                </span>
+              )}
+            </div>
 
-          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_60px_-48px_rgba(15,23,42,0.6)]">
-            {preview ? (
-              <div className="max-h-[520px] overflow-auto">
-                <table className="min-w-full border-collapse text-left text-sm">
-                  <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                    <tr>
-                      {TABLE_COLUMNS.map((column) => (
-                        <th
-                          key={column.key}
-                          className="border-b border-slate-200 px-4 py-3 font-semibold"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => handleSort(column.key)}
-                            className="flex items-center gap-2"
-                          >
-                            {column.label}
-                            {sortState.key === column.key && (
-                              <span className="text-[10px] text-slate-400">
-                                {sortState.direction === "asc" ? "A-Z" : "Z-A"}
-                              </span>
-                            )}
-                          </button>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedRows.map((row, rowIndex) => {
-                      const employeeId = String(row.employee_id ?? "");
-                      const isMissing = missingEmployeeSet.has(employeeId);
-                      const netSalary =
-                        typeof row.net_salary === "number"
-                          ? row.net_salary
-                          : Number(row.base_salary ?? 0) +
-                            Number(row.hra ?? 0) +
-                            Number(row.allowances ?? 0) -
-                            Number(row.deductions ?? 0);
-
-                      return (
-                        <tr
-                          key={`${rowIndex}-${employeeId || rowIndex}`}
-                          className="odd:bg-white even:bg-slate-50/60"
-                        >
-                          {TABLE_COLUMNS.map((column) => {
-                            const value =
-                              column.key === "net_salary"
-                                ? netSalary
-                                : row[column.key];
-                            const cellClass =
-                              column.key === "net_salary"
-                                ? "bg-emerald-50/60 text-emerald-800"
-                                : "text-slate-700";
-
-                            return (
-                              <td
-                                key={`${rowIndex}-${column.key}`}
-                                className={`border-b border-slate-100 px-4 py-3 ${cellClass}`}
+            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_60px_-48px_rgba(15,23,42,0.6)]">
+              {preview ? (
+                <div className="max-h-[520px] overflow-auto">
+                  {uploadType === "salary" ? (
+                    <table className="min-w-full border-collapse text-left text-sm">
+                      <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                          {TABLE_COLUMNS.map((column) => (
+                            <th
+                              key={column.key}
+                              className="border-b border-slate-200 px-4 py-3 font-semibold"
+                            >
+                              <button
+                                type="button"
+                                onClick={() => handleSort(column.key)}
+                                className="flex items-center gap-2"
                               >
-                                {column.key === "employee_id" ? (
-                                  <div className="flex items-center gap-2">
-                                    <span>{String(value ?? "")}</span>
-                                    {isMissing && (
-                                      <span
-                                        title="This employee ID was not found. They will be skipped."
-                                        className="text-amber-500"
-                                      >
-                                        ⚠️
-                                      </span>
-                                    )}
-                                  </div>
-                                ) : (
-                                  String(value ?? "")
+                                {column.label}
+                                {sortState.key === column.key && (
+                                  <span className="text-[10px] text-slate-400">
+                                    {sortState.direction === "asc" ? "A-Z" : "Z-A"}
+                                  </span>
                                 )}
-                              </td>
-                            );
-                          })}
+                              </button>
+                            </th>
+                          ))}
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center text-sm text-slate-500">
-                Upload a file to preview the salary table.
-              </div>
-            )}
+                      </thead>
+                      <tbody>
+                        {sortedRows.map((row, rowIndex) => {
+                          const employeeId = String(row.employee_id ?? "");
+                          const isMissing = missingEmployeeSet.has(employeeId);
+                          const netSalary =
+                            typeof row.net_salary === "number"
+                              ? row.net_salary
+                              : Number(row.base_salary ?? 0) +
+                                Number(row.hra ?? 0) +
+                                Number(row.allowances ?? 0) -
+                                Number(row.deductions ?? 0);
+
+                          return (
+                            <tr
+                              key={`${rowIndex}-${employeeId || rowIndex}`}
+                              className="odd:bg-white even:bg-slate-50/60"
+                            >
+                              {TABLE_COLUMNS.map((column) => {
+                                const value =
+                                  column.key === "net_salary"
+                                    ? netSalary
+                                    : row[column.key];
+                                const cellClass =
+                                  column.key === "net_salary"
+                                    ? "bg-emerald-50/60 text-emerald-800"
+                                    : "text-slate-700";
+
+                                return (
+                                  <td
+                                    key={`${rowIndex}-${column.key}`}
+                                    className={`border-b border-slate-100 px-4 py-3 ${cellClass}`}
+                                  >
+                                    {column.key === "employee_id" ? (
+                                      <div className="flex items-center gap-2">
+                                        <span>{String(value ?? "")}</span>
+                                        {isMissing && (
+                                          <span
+                                            title="This employee ID was not found. They will be skipped."
+                                            className="text-amber-500"
+                                          >
+                                            ⚠️
+                                          </span>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      String(value ?? "")
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <table className="min-w-full border-collapse text-left text-sm">
+                      <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                          {preview.columns.map((column) => (
+                            <th
+                              key={column}
+                              className="border-b border-slate-200 px-4 py-3 font-semibold"
+                            >
+                              {column}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.rows.map((row, rowIndex) => (
+                          <tr
+                            key={`employee-${rowIndex}`}
+                            className="odd:bg-white even:bg-slate-50/60"
+                          >
+                            {preview.columns.map((column) => (
+                              <td
+                                key={`${rowIndex}-${column}`}
+                                className="border-b border-slate-100 px-4 py-3 text-slate-700"
+                              >
+                                {String(row[column] ?? "")}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center text-sm text-slate-500">
+                  Upload a file to preview the data.
+                </div>
+              )}
+            </div>
           </div>
+
+          {showLivePanel && (
+            <aside
+              ref={summaryRef}
+              className="space-y-4 rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.5)] backdrop-blur"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-display font-semibold text-slate-900">
+                  Live dispatch
+                </h3>
+                <span className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  {revealedCount}/{dispatchResults.length}
+                </span>
+              </div>
+
+              <div className="grid gap-3">
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-500">
+                    Total Sent
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-emerald-700">
+                    {sentCount}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.2em] text-rose-500">
+                    Failed
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-rose-700">
+                    {failedCount}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.2em] text-amber-500">
+                    Skipped / Not Found
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-amber-700">
+                    {skippedCount}
+                  </p>
+                </div>
+              </div>
+
+              {allSent && (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 shadow-sm">
+                  All slips sent successfully.
+                </div>
+              )}
+
+              {isDispatching && dispatchResults.length === 0 && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                  Dispatch in progress. Updates will appear here.
+                </div>
+              )}
+
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+                  <span>Live updates</span>
+                  <span>{dispatchResults.length} total</span>
+                </div>
+                <div className="mt-3 max-h-56 space-y-2 overflow-auto pr-1">
+                  {dispatchResults.slice(0, revealedCount).map((item, index) => {
+                    const isSkipped =
+                      !item.success && item.error?.includes("not found");
+                    const statusLabel = item.success
+                      ? "Sent"
+                      : isSkipped
+                        ? "Skipped"
+                        : "Failed";
+                    const statusClass = item.success
+                      ? "text-emerald-600"
+                      : isSkipped
+                        ? "text-amber-600"
+                        : "text-rose-600";
+
+                    return (
+                      <div
+                        key={`${item.employee_id}-${index}`}
+                        className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs"
+                      >
+                        <div>
+                          <p className="font-semibold text-slate-700">
+                            {item.employee_id || "Unknown"}
+                          </p>
+                          <p className="text-slate-500">{item.name}</p>
+                        </div>
+                        <span className={`font-semibold ${statusClass}`}>
+                          {statusLabel}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {dispatchResults.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400">
+                      Waiting for results...
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={handleDownloadReport}
+                  disabled={dispatchResults.length === 0}
+                  className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                    dispatchResults.length === 0
+                      ? "border-slate-200 text-slate-300"
+                      : "border-slate-300 text-slate-700 hover:border-slate-400"
+                  }`}
+                >
+                  Download Report (CSV)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReupload}
+                  className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Start New Batch
+                </button>
+              </div>
+            </aside>
+          )}
         </section>
       </div>
 
@@ -572,7 +915,7 @@ export default function Home() {
         <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200 bg-white/90 px-6 py-4 shadow-[0_-20px_60px_-40px_rgba(15,23,42,0.6)] backdrop-blur">
           <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3">
             <span className="text-sm text-slate-500">
-              Review the table before dispatching.
+              Review the table before confirming.
             </span>
             <div className="flex items-center gap-3">
               <button
@@ -598,7 +941,11 @@ export default function Home() {
                     Processing...
                   </span>
                 ) : (
-                  <span>Confirm &amp; Dispatch &rarr;</span>
+                  <span>
+                    {uploadType === "employees"
+                      ? "Confirm &amp; Save Employees →"
+                      : "Confirm &amp; Dispatch →"}
+                  </span>
                 )}
               </button>
             </div>
@@ -610,11 +957,12 @@ export default function Home() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-6">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.7)]">
             <h3 className="text-lg font-display font-semibold text-slate-900">
-              Confirm dispatch
+              Confirm {uploadType === "employees" ? "upload" : "dispatch"}
             </h3>
             <p className="mt-3 text-sm text-slate-600">
-              You are about to email {employeeCount} employees. This cannot be
-              undone.
+              {uploadType === "employees"
+                ? `You are about to save ${employeeCount} employees to the master list.`
+                : `You are about to email ${employeeCount} employees. This cannot be undone.`}
             </p>
             <div className="mt-6 flex items-center justify-end gap-3">
               <button
