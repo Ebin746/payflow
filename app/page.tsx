@@ -64,6 +64,17 @@ const EMPLOYEE_REQUIRED_COLUMNS = [
   "designation",
 ];
 
+const SAMPLE_CSV_FILES: Record<UploadType, { href: string; download: string }> = {
+  employees: {
+    href: "/sample-csvs/employees-sample.csv",
+    download: "employees-sample.csv",
+  },
+  salary: {
+    href: "/sample-csvs/salary-records-sample.csv",
+    download: "salary-records-sample.csv",
+  },
+};
+
 const TABLE_COLUMNS = [
   { key: "employee_id", label: "Employee ID" },
   { key: "name", label: "Name" },
@@ -238,16 +249,7 @@ export default function Home() {
   const requiredColumns =
     uploadType === "employees" ? EMPLOYEE_REQUIRED_COLUMNS : REQUIRED_COLUMNS;
 
-  const sampleCsv = useMemo(() => {
-    const header = requiredColumns.join(",");
-    const sampleRow =
-      uploadType === "employees"
-        ? "EMP001,Jordan Lee,jordan.lee@payflow.com,Accountant"
-        : "EMP001,60000,12000,3000,1500,5,2026";
-    return `data:text/csv;charset=utf-8,${encodeURIComponent(
-      `${header}\n${sampleRow}`
-    )}`;
-  }, [requiredColumns, uploadType]);
+  const sampleCsv = useMemo(() => SAMPLE_CSV_FILES[uploadType], [uploadType]);
 
   async function fetchEmployeeLookup(employeeIds: string[]) {
     if (employeeIds.length === 0) {
@@ -924,8 +926,8 @@ export default function Home() {
                     ))}
                   </div>
                   <a
-                    href={sampleCsv}
-                    download="salary-template.csv"
+                    href={sampleCsv.href}
+                    download={sampleCsv.download}
                     className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900"
                   >
                     Download sample CSV

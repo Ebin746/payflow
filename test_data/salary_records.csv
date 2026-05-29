@@ -1,0 +1,4 @@
+employee_id,base_salary,hra,allowances,deductions,month,year,net_salary
+EMP001,50000.0,10000.0,5000.0,3000.0,1,2025,62000.0
+EMP002,45000.0,9000.0,4000.0,2500.0,1,2025,55500.0
+
