@@ -121,9 +121,11 @@ http://localhost:3000
 ## Using the Application
 
 - Use the sample data in `public/sample-csvs/` to test the workflow.
-- The upload card in the app shows the expected column format for each file type.
+- First upload the employee details file with columns like `name`, `employee_id`, `email`, and `designation`.
+- Then choose the salary dispatch option and upload the monthly salary details file.
+- After that, confirm the data and dispatch the salary slips.
+- If you need help with file structure, check the `Expected format` section in the upload card.
 - You can also download the dummy template files directly from the upload section.
-- The app supports employee master uploads and monthly salary dispatch uploads.
 
 ### Expected Data
 
