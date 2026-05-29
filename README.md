@@ -232,6 +232,53 @@ Net Salary = (Base Salary + HRA + Allowances) - Deductions
 
 This value is stored in `salary_records.net_salary` and used in the generated salary slip PDF.
 
+## API Routes
+
+Payflow uses a small set of focused API routes to keep the upload and dispatch flow modular:
+
+### `POST /api/upload`
+
+- Parses the uploaded CSV or Excel file.
+- Returns the column list, all parsed rows, and the total row count.
+- Used immediately after a file is selected to build the preview table.
+
+### `POST /api/employees/validate`
+
+- Validates employee IDs against the employee master table.
+- Returns only the missing employee IDs.
+- Used before salary dispatch so invalid salary rows can be flagged early.
+
+### `POST /api/employees/lookup`
+
+- Fetches employee name and email details for a list of employee IDs.
+- Also returns which IDs are missing from the database.
+- Used to enrich salary rows with employee information in the preview table.
+
+### `POST /api/employees`
+
+- Upserts employee master rows into the `employees` table.
+- Used when the admin uploads an employee master file.
+- Confirms how many employee records were saved successfully.
+
+### `POST /api/dispatch`
+
+- Dispatches salary rows and returns the final dispatch result in JSON.
+- Used when a non-streaming dispatch response is needed.
+- Returns matched employees, inserted salary records, and row-level results.
+
+### `POST /api/dispatch/stream`
+
+- Streams dispatch progress as Server-Sent Events (SSE).
+- Sends live `init`, `progress`, `complete`, and `error` events.
+- Used by the UI to show real-time salary dispatch monitoring while emails and PDFs are processed.
+
+### How the APIs Work Together
+
+1. The user uploads a file through `POST /api/upload`.
+2. The UI validates employee IDs with `POST /api/employees/validate` and enriches rows with `POST /api/employees/lookup` when needed.
+3. Employee master uploads are saved through `POST /api/employees`.
+4. Salary dispatch uses `POST /api/dispatch/stream` for live monitoring, or `POST /api/dispatch` for a standard JSON response.
+
 ## Future Enhancements
 
 Planned improvements for scaling and reliability:

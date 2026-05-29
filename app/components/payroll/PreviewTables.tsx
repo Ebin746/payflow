@@ -31,6 +31,9 @@ type PreviewTablesProps = {
   uploadType: UploadType;
   warningCountForPreview: number;
   employeeCount: number;
+  totalRows: number;
+  totalBatchCount: number;
+  activeBatchIndex: number;
   isEmployeeLookupLoading: boolean;
   sortedRows: SortedRow[];
   tableColumns: TableColumn[];
@@ -38,6 +41,7 @@ type PreviewTablesProps = {
   employeeLookup: Record<string, EmployeeLookup>;
   missingEmployeeSet: Set<string>;
   validationErrors: Record<number, Record<string, string>>;
+  onBatchChange: (batchIndex: number) => void;
   onSort: (key: string) => void;
   onRemoveRow: (rowIndex: number) => void;
   onEditRow: (rowIndex: number) => void;
@@ -48,6 +52,9 @@ export default function PreviewTables({
   uploadType,
   warningCountForPreview,
   employeeCount,
+  totalRows,
+  totalBatchCount,
+  activeBatchIndex,
   isEmployeeLookupLoading,
   sortedRows,
   tableColumns,
@@ -55,6 +62,7 @@ export default function PreviewTables({
   employeeLookup,
   missingEmployeeSet,
   validationErrors,
+  onBatchChange,
   onSort,
   onRemoveRow,
   onEditRow,
@@ -99,6 +107,21 @@ export default function PreviewTables({
                 {employeeCount} rows · {warningCountForPreview} warning
                 {warningCountForPreview === 1 ? "" : "s"}
               </span>
+              {totalRows > 0 && (
+                <span className="text-slate-500">
+                  Showing {employeeCount} of {totalRows} total rows
+                </span>
+              )}
+              {totalBatchCount > 1 && (
+                <span className="text-slate-500">
+                  Batch {activeBatchIndex + 1} of {totalBatchCount}
+                </span>
+              )}
+              {totalBatchCount > 1 && (
+                <span className="text-amber-700">
+                  Processing 20 rows at a time
+                </span>
+              )}
               {uploadType === "salary" && isEmployeeLookupLoading && (
                 <span className="inline-flex items-center gap-2 text-xs font-semibold text-slate-500">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-slate-400" />
@@ -143,6 +166,39 @@ export default function PreviewTables({
           </div>
         )}
       </div>
+
+      {preview && totalBatchCount > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
+          <div>
+            <p className="font-semibold">Batch selection</p>
+            <p className="mt-1 text-xs text-amber-800">
+              Due to current Next.js processing constraints, uploads are handled
+              in batches of 20 rows. Select a batch to review or dispatch the
+              first 20, second 20, third 20, and any remaining rows.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+              View
+            </span>
+            <select
+              value={activeBatchIndex}
+              onChange={(event) => onBatchChange(Number(event.target.value))}
+              className="rounded-full border border-amber-200 bg-white px-4 py-2 text-sm font-semibold text-amber-900 shadow-sm focus:border-amber-300 focus:outline-none"
+            >
+              {Array.from({ length: totalBatchCount }, (_, index) => {
+                const start = index * 20 + 1;
+                const end = Math.min(totalRows, start + 19);
+                return (
+                  <option key={`batch-${index}`} value={index}>
+                    {`Rows ${start}-${end}`}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-3xl border border-sky-200/80 bg-gradient-to-b from-sky-200 to-sky-100 shadow-[0_24px_60px_-48px_rgba(15,23,42,0.06)] min-w-0">
         {preview ? (

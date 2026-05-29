@@ -80,8 +80,8 @@ export default function BottomBar({
               ) : (
                 <span>
                   {uploadType === "employees"
-                    ? "Confirm &amp; Save Employees →"
-                    : "Confirm &amp; Dispatch →"}
+                    ? "Save Employees →"
+                    : "Dispatch Payroll →"}
                 </span>
               )}
             </button>

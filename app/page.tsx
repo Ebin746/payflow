@@ -88,6 +88,8 @@ const TABLE_COLUMNS = [
   { key: "year", label: "Year" },
 ];
 
+const MAX_ROWS_PER_BATCH = 20;
+
 type SortState = {
   key: string;
   direction: "asc" | "desc";
@@ -128,6 +130,11 @@ function parseNumber(value: unknown) {
     return Number.isNaN(parsed) ? null : parsed;
   }
   return null;
+}
+
+function getBatchRows<T>(rows: T[], batchIndex: number, batchSize: number) {
+  const start = batchIndex * batchSize;
+  return rows.slice(start, start + batchSize);
 }
 
 function validateRows(
@@ -238,7 +245,9 @@ export default function Home() {
     skipped: 0,
   });
   const [editRowIndex, setEditRowIndex] = useState<number | null>(null);
+  const [selectedBatchIndex, setSelectedBatchIndex] = useState(0);
   const [revealedCount, setRevealedCount] = useState(0);
+  const [showEmployeeSuccessTick, setShowEmployeeSuccessTick] = useState(false);
   const [sortState, setSortState] = useState<SortState>({
     key: "employee_id",
     direction: "asc",
@@ -250,6 +259,29 @@ export default function Home() {
     uploadType === "employees" ? EMPLOYEE_REQUIRED_COLUMNS : REQUIRED_COLUMNS;
 
   const sampleCsv = useMemo(() => SAMPLE_CSV_FILES[uploadType], [uploadType]);
+
+  const totalBatchCount = preview
+    ? Math.max(1, Math.ceil(preview.totalRows / MAX_ROWS_PER_BATCH))
+    : 0;
+  const activeBatchIndex =
+    preview && totalBatchCount > 0
+      ? Math.min(selectedBatchIndex, totalBatchCount - 1)
+      : 0;
+  const activeBatchRows = useMemo(() => {
+    if (!preview) {
+      return [];
+    }
+    return getBatchRows(preview.rows, activeBatchIndex, MAX_ROWS_PER_BATCH);
+  }, [activeBatchIndex, preview]);
+  const activePreview = useMemo(() => {
+    if (!preview) {
+      return null;
+    }
+    return {
+      ...preview,
+      rows: activeBatchRows,
+    };
+  }, [activeBatchRows, preview]);
 
   async function fetchEmployeeLookup(employeeIds: string[]) {
     if (employeeIds.length === 0) {
@@ -306,6 +338,7 @@ export default function Home() {
       skipped: 0,
     });
     setEditRowIndex(null);
+    setSelectedBatchIndex(0);
     setRevealedCount(0);
     setIsLoading(true);
 
@@ -331,6 +364,7 @@ export default function Home() {
       const previewPayload = payload as UploadPreview;
 
       setPreview(previewPayload);
+      setSelectedBatchIndex(0);
 
       const missing = requiredColumns.filter(
         (column) => !previewPayload.columns.includes(column)
@@ -338,7 +372,12 @@ export default function Home() {
       setMissingColumns(missing);
 
       if (missing.length === 0 && uploadType === "salary") {
-        const employeeIds = previewPayload.rows
+        const initialBatchRows = getBatchRows(
+          previewPayload.rows,
+          0,
+          MAX_ROWS_PER_BATCH
+        );
+        const employeeIds = initialBatchRows
           .map((row) => String(row.employee_id ?? "").trim())
           .filter(Boolean);
 
@@ -372,7 +411,7 @@ export default function Home() {
   }
 
   async function handleDispatch() {
-    if (!preview || hasBlockingIssues || isDispatching) {
+    if (!activePreview || hasBlockingIssues || isDispatching) {
       if (hasBlockingIssues) {
         setErrorMessage("Resolve validation issues before dispatch.");
       }
@@ -385,7 +424,7 @@ export default function Home() {
     setDispatchMessage(null);
     setDispatchResults([]);
     setDispatchProgress({
-      total: preview.rows.length,
+      total: activePreview.rows.length,
       processed: 0,
       success: 0,
       failed: 0,
@@ -397,7 +436,7 @@ export default function Home() {
         const response = await fetch("/api/employees", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rows: preview.rows }),
+          body: JSON.stringify({ rows: activePreview.rows }),
         });
         const payload = (await response.json()) as
           | { employeesUpserted?: number }
@@ -412,13 +451,14 @@ export default function Home() {
         setDispatchMessage(
           `Employee upload complete. ${upsertedCount} records saved.`
         );
+        setShowEmployeeSuccessTick(true);
         return;
       }
 
       const response = await fetch("/api/dispatch/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: preview.rows }),
+        body: JSON.stringify({ rows: activePreview.rows }),
       });
 
       if (!response.ok || !response.body) {
@@ -562,7 +602,9 @@ export default function Home() {
       skipped: 0,
     });
     setRevealedCount(0);
+    setShowEmployeeSuccessTick(false);
     setEditRowIndex(null);
+    setSelectedBatchIndex(0);
     setIsLoading(false);
     setIsDispatching(false);
     setShowConfirmModal(false);
@@ -584,7 +626,7 @@ export default function Home() {
   }
 
   const extension = selectedFile ? getExtension(selectedFile.name) : "";
-  const employeeCount = preview?.rows.length ?? 0;
+  const employeeCount = activePreview?.rows.length ?? 0;
   const totalResults = dispatchResults.length;
   const sentCount = dispatchResults.filter((item) => item.success).length;
   const failedCount = dispatchResults.filter((item) => !item.success).length;
@@ -612,7 +654,7 @@ export default function Home() {
           "month",
           "year",
         ]
-      : preview?.columns ?? [];
+        : activePreview?.columns ?? [];
 
   function handleDownloadReport() {
     if (dispatchResults.length === 0) {
@@ -651,15 +693,15 @@ export default function Home() {
   }
 
   const rowEmployeeIdSet = useMemo(() => {
-    if (!preview || uploadType !== "salary") {
+    if (!activePreview || uploadType !== "salary") {
       return new Set<string>();
     }
     return new Set(
-      preview.rows
+      activePreview.rows
         .map((row) => String(row.employee_id ?? "").trim())
         .filter(Boolean)
     );
-  }, [preview, uploadType]);
+  }, [activePreview, uploadType]);
 
   const missingEmployeeSet = useMemo(() => {
     if (uploadType !== "salary") {
@@ -671,8 +713,8 @@ export default function Home() {
   }, [missingEmployees, rowEmployeeIdSet, uploadType]);
 
   const validationErrors = useMemo(
-    () => validateRows(preview, uploadType, requiredColumns),
-    [preview, uploadType, requiredColumns]
+    () => validateRows(activePreview, uploadType, requiredColumns),
+    [activePreview, uploadType, requiredColumns]
   );
 
   const validationErrorCount = useMemo(
@@ -694,10 +736,10 @@ export default function Home() {
     (uploadType === "salary" && missingEmployeeSet.size > 0);
 
   const sortedRows = useMemo(() => {
-    if (!preview) {
+    if (!activePreview) {
       return [];
     }
-    const rowsCopy = preview.rows.map((row, index) => ({
+    const rowsCopy = activePreview.rows.map((row, index) => ({
       row,
       index,
     }));
@@ -744,14 +786,17 @@ export default function Home() {
     });
 
     return rowsCopy;
-  }, [preview, sortState, employeeLookup]);
+  }, [activePreview, sortState, employeeLookup]);
 
   function handleRemoveRow(rowIndex: number) {
+    const globalRowIndex = activeBatchIndex * MAX_ROWS_PER_BATCH + rowIndex;
     setPreview((current) => {
       if (!current) {
         return current;
       }
-      const nextRows = current.rows.filter((_, index) => index !== rowIndex);
+      const nextRows = current.rows.filter(
+        (_, index) => index !== globalRowIndex
+      );
       setDispatchLocked(false);
       return { ...current, rows: nextRows, totalRows: nextRows.length };
     });
@@ -765,12 +810,13 @@ export default function Home() {
     rowIndex: number,
     updatedRow: Record<string, string>
   ) {
+    const globalRowIndex = activeBatchIndex * MAX_ROWS_PER_BATCH + rowIndex;
     setPreview((current) => {
       if (!current) {
         return current;
       }
       const nextRows = current.rows.map((row, index) => {
-        if (index !== rowIndex) {
+        if (index !== globalRowIndex) {
           return row;
         }
         return { ...row, ...updatedRow };
@@ -782,11 +828,11 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (!preview || uploadType !== "salary" || missingColumns.length > 0) {
+    if (!activePreview || uploadType !== "salary" || missingColumns.length > 0) {
       return;
     }
 
-    const employeeIds = preview.rows
+    const employeeIds = activePreview.rows
       .map((row) => String(row.employee_id ?? "").trim())
       .filter(Boolean);
 
@@ -795,7 +841,7 @@ export default function Home() {
     }, 300);
 
     return () => window.clearTimeout(timeoutId);
-  }, [preview, uploadType, missingColumns.length]);
+  }, [activePreview, uploadType, missingColumns.length]);
 
   useEffect(() => {
     if (dispatchResults.length === 0) {
@@ -815,6 +861,19 @@ export default function Home() {
 
     return () => window.clearInterval(intervalId);
   }, [dispatchResults.length]);
+
+  useEffect(() => {
+    if (!showEmployeeSuccessTick) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShowEmployeeSuccessTick(false);
+      setDispatchMessage(null);
+    }, 2200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [showEmployeeSuccessTick]);
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(252,252,250,1)_0%,_rgba(240,243,248,1)_45%,_rgba(230,236,244,1)_100%)]">
@@ -1056,8 +1115,17 @@ export default function Home() {
               : "lg:grid-cols-1"
           }`}
         >
+          {preview && preview.totalRows > MAX_ROWS_PER_BATCH && (
+            <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 shadow-sm lg:col-span-full">
+              <span className="font-semibold">Large file detected.</span> Due
+              to current Next.js processing constraints, uploads are handled in
+              batches of 20 rows. Use the batch selector below to review or
+              dispatch the 1st, 2nd, 3rd, or remaining rows.
+            </div>
+          )}
+
           <PreviewTables
-            preview={preview}
+            preview={activePreview}
             uploadType={uploadType}
             warningCountForPreview={warningCountForPreview}
             employeeCount={employeeCount}
@@ -1068,6 +1136,23 @@ export default function Home() {
             employeeLookup={employeeLookup}
             missingEmployeeSet={missingEmployeeSet}
             validationErrors={validationErrors}
+            totalRows={preview?.totalRows ?? 0}
+            totalBatchCount={totalBatchCount}
+            activeBatchIndex={activeBatchIndex}
+            onBatchChange={(nextBatchIndex) => {
+              setSelectedBatchIndex(nextBatchIndex);
+              setEditRowIndex(null);
+              setDispatchMessage(null);
+              setDispatchResults([]);
+              setDispatchProgress({
+                total: 0,
+                processed: 0,
+                success: 0,
+                failed: 0,
+                skipped: 0,
+              });
+              setDispatchLocked(false);
+            }}
             onSort={handleSort}
             onRemoveRow={handleRemoveRow}
             onEditRow={handleEditRow}
@@ -1122,8 +1207,8 @@ export default function Home() {
         rowIndex={editRowIndex}
         columns={editColumns}
         row={
-          editRowIndex !== null && preview
-            ? preview.rows[editRowIndex]
+          editRowIndex !== null && activePreview
+            ? activePreview.rows[editRowIndex]
             : null
         }
         nonEditableColumns={[]}
@@ -1196,6 +1281,39 @@ export default function Home() {
             </div>
           </div>
         ))}
+
+      {showEmployeeSuccessTick && dispatchMessage?.startsWith("Employee upload complete") && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/10 px-6">
+          <div className="w-full max-w-md rounded-3xl border border-emerald-200 bg-white p-6 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.7)]">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-inner animate-pulse">
+                <svg
+                  className="h-7 w-7"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-500">
+                  Success
+                </p>
+                <p className="text-base font-semibold text-slate-900">
+                  Employee file saved successfully
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  {dispatchMessage}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 
-const MAX_PREVIEW_ROWS = 200;
-
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -37,11 +35,10 @@ export async function POST(request: Request) {
     });
 
     const columns = Array.from(columnsSet);
-    const rows = rawRows.slice(0, MAX_PREVIEW_ROWS);
 
     return NextResponse.json({
       columns,
-      rows,
+      rows: rawRows,
       totalRows: rawRows.length,
     });
   } catch (error) {
