@@ -824,7 +824,7 @@ export default function Home() {
       >
         <header className="flex flex-col gap-3">
           <h1 className="text-2xl font-display font-semibold tracking-tight text-slate-900 sm:text-3xl">
-            Automate payroll uploads & dispatch
+            Automate Payflow uploads & dispatch
           </h1>
           {/* Steps moved to Landing component to keep layout consistent */}
         </header>
@@ -859,11 +859,7 @@ export default function Home() {
           </div>
         )}
 
-        {dispatchMessage && (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-700 shadow-sm">
-            {dispatchMessage}
-          </div>
-        )}
+        {/* dispatch message removed from header section per request */}
 
         <section className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
           <div className="rounded-3xl border border-slate-200 bg-white/70 p-6 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.5)] backdrop-blur">
@@ -902,7 +898,7 @@ export default function Home() {
                       >
                         {type === "employees"
                           ? "One-time master upload"
-                          : "Monthly payroll file"}
+                          : "Monthly Payflow file"}
                       </span>
                     </button>
                   ))}

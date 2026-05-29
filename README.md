@@ -1,10 +1,10 @@
 # Payflow
 
 ## Project Title
-Payroll Console — Payflow
+Payflow Console — Payflow
 
 ## Overview
-Payflow is a web application for automating payroll uploads, validation, PDF salary slip generation and email dispatch. It provides an admin-facing UI to upload employee or salary spreadsheets, preview and edit rows, validate required columns and fields, then generate and email personalized PDF salary slips to employees.
+Payflow is a web application for automating payflow uploads, validation, PDF salary slip generation and email dispatch. It provides an admin-facing UI to upload employee or salary spreadsheets, preview and edit rows, validate required columns and fields, then generate and email personalized PDF salary slips to employees.
 
 ## What the project does
 - Accepts CSV or XLSX uploads (first sheet extracted).
@@ -14,10 +14,10 @@ Payflow is a web application for automating payroll uploads, validation, PDF sal
 - Streams salary dispatch progress and shows results.
 
 ## Problem it solves
-Manual payroll email distribution is time-consuming, error-prone, and hard to audit. Payflow automates the parsing, validation, PDF generation, and email dispatch of salary slips, reducing manual effort and improving accuracy and traceability.
+Manual payflow email distribution is time-consuming, error-prone, and hard to audit. Payflow automates the parsing, validation, PDF generation, and email dispatch of salary slips, reducing manual effort and improving accuracy and traceability.
 
 ## Key objectives
-- Fast, reliable bulk payroll processing.
+- Fast, reliable bulk payflow processing.
 - Clear preview and validation before dispatch.
 - Simple setup and extensible architecture.
 
@@ -83,7 +83,7 @@ app/
 	page.tsx            # Main UI, upload flow, preview and dispatch wiring
 	components/
 		Landing.tsx
-		payroll/
+		payflow/
 			PreviewTables.tsx
 			BottomBar.tsx
 			ConfirmModal.tsx
@@ -108,7 +108,7 @@ README.md
 ```
 
 ## Application Flow
-1. Choose upload type: `employees` (master) or `salary` (payroll slips).
+1. Choose upload type: `employees` (master) or `salary` (payflow slips).
 2. Upload CSV/XLSX (first sheet extracted and validated against required columns).
 3. Preview data in a table, edit rows inline if needed.
 4. Confirm to dispatch: generate PDFs and send emails. For salary dispatch, progress is streamed and displayed.
@@ -191,7 +191,7 @@ Create a `.env` file in the project root with the following values:
 
 ## Assumptions & Limitations
 - Assumes CSV/XLSX files use consistent headers (lowercase recommended).
-- Large files may need server resources tuning; consider queueing or background workers for very large payrolls.
+- Large files may need server resources tuning; consider queueing or background workers for very large payflows.
 
 ## Future Enhancements
 - Background job queue (e.g., BullMQ) for large dispatches.

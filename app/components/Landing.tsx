@@ -21,10 +21,16 @@ export default function Landing({ previewRef }: LandingProps) {
         <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
           <div className="space-y-6">
             <h1 className="text-4xl font-display font-bold tracking-tight text-slate-900">
-              Payroll Console — Upload, Validate, Dispatch
+              Payflow Console
             </h1>
-            <p className="text-lg text-slate-700">
-              Build an automated pipeline where an admin uploads an employee payroll sheet and the system generates structured salary slip PDFs and emails them directly to each employee. Validate columns, preview rows, and confirm only when everything checks out.
+            <p className="text-lg font-semibold text-slate-700">
+              Payflow processing made effortless.
+            </p>
+            <p className="text-base text-slate-700">
+              Upload Payflow data, verify records, generate salary slips, and email employees automatically—all in a few clicks.
+            </p>
+            <p className="mt-3 text-sm text-slate-600 font-medium">
+              Accurate payflow. Automated delivery. Zero hassle.
             </p>
 
             <div className="flex items-start gap-6">
@@ -57,7 +63,7 @@ export default function Landing({ previewRef }: LandingProps) {
           <div className="hidden md:flex w-full items-center justify-center">
             <div className="w-full max-w-md">
               <h3 className="text-lg font-semibold text-slate-900 mb-3">
-                Automate payroll uploads & dispatch
+                Automate Payflow uploads & dispatch
               </h3>
               <div className="flex flex-col gap-3">
                 <div className="flex items-start gap-3 rounded-lg border border-sky-100 bg-white p-4 shadow-sm">

@@ -44,7 +44,7 @@ export async function sendSalarySlipEmail({
     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #222;">
       <p>Hi ${name},</p>
       <p>Please find your salary slip for <strong>${monthLabel}/${year}</strong> attached.</p>
-      <p>Regards,<br />Payroll Team</p>
+      <p>Regards,<br />Payflow Team</p>
     </div>
   `;
 
