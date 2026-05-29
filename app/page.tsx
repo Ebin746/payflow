@@ -876,6 +876,9 @@ export default function Home() {
                 <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
                   Upload type
                 </p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Choose what you want to manage in Payflow.
+                </p>
                 <div className="mt-3 flex flex-col gap-2">
                   {(["employees", "salary"] as UploadType[]).map((type) => (
                     <button
@@ -888,20 +891,31 @@ export default function Home() {
                           : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
                       }`}
                     >
-                      <span className="font-semibold">
-                        {type === "employees"
-                          ? "Employee master"
-                          : "Salary dispatch"}
-                      </span>
-                      <span
-                        className={`text-xs ${
-                          uploadType === type ? "text-slate-200" : "text-slate-400"
-                        }`}
-                      >
-                        {type === "employees"
-                          ? "One-time master upload"
-                          : "Monthly Payflow file"}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="flex h-8 w-8 items-center justify-center rounded-full bg-black text-xs font-semibold text-white"
+                        >
+                          {type === "employees" ? "1" : "2"}
+                        </span>
+                        <div className="flex flex-col">
+                          <span className="font-semibold">
+                            {type === "employees"
+                              ? "Employee master data"
+                              : "Salary dispatch"}
+                          </span>
+                          <span
+                            className={`text-xs ${
+                              uploadType === type
+                                ? "text-slate-200"
+                                : "text-slate-400"
+                            }`}
+                          >
+                            {type === "employees"
+                              ? "Create or update the employee directory once"
+                              : "Upload monthly payroll to generate slips"}
+                          </span>
+                        </div>
+                      </div>
                     </button>
                   ))}
                 </div>

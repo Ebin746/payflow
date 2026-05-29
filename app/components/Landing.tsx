@@ -16,8 +16,8 @@ export default function Landing({ previewRef }: LandingProps) {
   };
 
   return (
-    <section className="w-full bg-gradient-to-b from-sky-200 via-sky-100 to-white">
-      <div className="mx-auto max-w-6xl px-6 py-20 text-slate-900">
+    <section className="flex w-full min-h-[90vh] items-center bg-linear-to-b from-sky-200 via-sky-100 to-white">
+      <div className="mx-auto max-w-6xl px-6 py-12 text-slate-900 md:py-16">
         <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
           <div className="space-y-6">
             <h1 className="text-4xl font-display font-bold tracking-tight text-slate-900">
