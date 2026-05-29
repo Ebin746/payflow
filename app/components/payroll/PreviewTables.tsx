@@ -118,7 +118,7 @@ export default function PreviewTables({
                 <select
                   value={sortState.key}
                   onChange={(event) => onSort(event.target.value)}
-                  className="w-full appearance-none rounded-xl border border-slate-200/80 bg-white px-3 py-2 pr-8 text-xs font-semibold text-slate-700 shadow-sm transition focus:border-slate-400 focus:outline-none"
+                  className="w-full appearance-none rounded-full border border-sky-200 bg-white/95 px-4 py-2 pr-10 text-sm font-semibold text-slate-700 shadow-md transition focus:border-sky-300 focus:outline-none"
                 >
                   {tableColumns.map((column) => (
                     <option key={`sort-${column.key}`} value={column.key}>
@@ -126,14 +126,16 @@ export default function PreviewTables({
                     </option>
                   ))}
                 </select>
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">
-                  ▼
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => onSort(sortState.key)}
-                className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 sm:w-auto"
+                className="rounded-full border border-sky-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-md transition hover:shadow-lg sm:w-auto"
               >
                 {sortState.direction === "asc" ? "Ascending" : "Descending"}
               </button>
@@ -142,7 +144,7 @@ export default function PreviewTables({
         )}
       </div>
 
-      <div className="overflow-hidden rounded-3xl border border-slate-200/70 bg-white shadow-[0_24px_60px_-48px_rgba(15,23,42,0.6)] min-w-0">
+      <div className="overflow-hidden rounded-3xl border border-sky-200/80 bg-gradient-to-b from-sky-200 to-sky-100 shadow-[0_24px_60px_-48px_rgba(15,23,42,0.06)] min-w-0">
         {preview ? (
           <div className="max-h-[520px] min-w-0">
             <div className="max-h-[520px] space-y-3 overflow-y-auto px-4 py-4 sm:hidden">
@@ -172,11 +174,11 @@ export default function PreviewTables({
                     return (
                       <div
                         key={`mobile-${rowIndex}-${employeeId}`}
-                        className={`rounded-2xl border px-4 py-3 shadow-sm ${
-                          hasMissingFields || hasRowErrors
-                            ? "border-rose-300 bg-rose-100/80"
-                            : "border-slate-200/80 bg-white"
-                        }`}
+                        className={`rounded-2xl border px-4 py-3 shadow-sm transition hover:shadow-md ${
+                            hasMissingFields || hasRowErrors
+                              ? "border-rose-300 bg-rose-100/80"
+                              : "border-sky-200/80 bg-sky-50"
+                          }`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
@@ -325,11 +327,11 @@ export default function PreviewTables({
                     return (
                       <div
                         key={`mobile-employee-${rowIndex}`}
-                        className={`rounded-2xl border px-4 py-3 shadow-sm ${
-                          hasMissingFields || hasRowErrors
-                            ? "border-rose-300 bg-rose-100/80"
-                            : "border-slate-200/80 bg-white"
-                        }`}
+                        className={`rounded-2xl border px-4 py-3 shadow-sm transition hover:shadow-md ${
+                            hasMissingFields || hasRowErrors
+                              ? "border-rose-300 bg-rose-100/80"
+                              : "border-sky-200/80 bg-sky-50"
+                          }`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <p className="min-w-0 flex-1 text-sm font-semibold text-slate-900">
@@ -406,15 +408,15 @@ export default function PreviewTables({
                   })}
             </div>
 
-            <div className="hidden max-h-[520px] overflow-x-auto overflow-y-auto sm:block min-w-0">
+            <div className="hidden max-h-[520px] overflow-x-auto overflow-y-auto sm:block min-w-0 flex justify-center">
               {uploadType === "salary" ? (
                 <table className="min-w-[1200px] w-max table-auto border-collapse text-left text-xs sm:text-sm">
-                  <thead className="sticky top-0 bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+                  <thead className="sticky top-0 bg-sky-200 text-[11px] uppercase tracking-wide text-slate-500">
                     <tr>
                       {tableColumns.map((column) => (
                         <th
                           key={column.key}
-                          className="border-b border-slate-200/80 px-3 py-2 font-semibold sm:px-4 sm:py-3"
+                          className="border-b border-sky-200/80 px-3 py-2 font-semibold sm:px-4 sm:py-3"
                         >
                           <button
                             type="button"
@@ -464,7 +466,7 @@ export default function PreviewTables({
                           className={
                             hasMissingFields || hasRowErrors
                               ? "bg-rose-100/80"
-                              : "odd:bg-white even:bg-slate-50/60"
+                              : "odd:bg-white even:bg-sky-100/60"
                           }
                         >
                           {tableColumns.map((column) => {
@@ -495,7 +497,7 @@ export default function PreviewTables({
                             return (
                               <td
                                 key={`${rowIndex}-${column.key}`}
-                                className={`border-b border-slate-100/80 px-3 py-2 sm:px-4 sm:py-3 ${cellClass} ${responsiveCellClass}`}
+                                className={`border-b border-sky-200/80 px-3 py-2 sm:px-4 sm:py-3 ${cellClass} ${responsiveCellClass}`}
                               >
                                 {column.key === "employee_id" ? (
                                   <div className="flex items-center gap-2">
@@ -584,13 +586,13 @@ export default function PreviewTables({
                   </tbody>
                 </table>
               ) : (
-                <table className="min-w-[900px] w-max table-auto border-collapse text-left text-xs sm:text-sm">
-                  <thead className="sticky top-0 bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+                <table className="w-full table-auto border-collapse text-left text-xs sm:text-sm">
+                  <thead className="sticky top-0 bg-sky-200 text-[11px] uppercase tracking-wide text-slate-500">
                     <tr>
                       {preview.columns.map((column) => (
                         <th
                           key={column}
-                          className="border-b border-slate-200/80 px-3 py-2 font-semibold sm:px-4 sm:py-3"
+                          className="border-b border-sky-200/80 px-3 py-2 font-semibold sm:px-4 sm:py-3"
                         >
                           {column}
                         </th>
@@ -615,7 +617,7 @@ export default function PreviewTables({
                           className={
                             hasMissingFields || hasRowErrors
                               ? "bg-rose-100/80"
-                              : "odd:bg-white even:bg-slate-50/60"
+                              : "odd:bg-white even:bg-sky-100/60"
                           }
                         >
                           {preview.columns.map((column) => {
@@ -623,7 +625,7 @@ export default function PreviewTables({
                             return (
                               <td
                                 key={`${rowIndex}-${column}`}
-                                className="border-b border-slate-100/80 px-3 py-2 text-slate-700 sm:px-4 sm:py-3"
+                                className="border-b border-sky-200/80 px-3 py-2 text-slate-700 sm:px-4 sm:py-3"
                               >
                                 <span className="block whitespace-normal break-words">
                                   {String(row[column] ?? "")}

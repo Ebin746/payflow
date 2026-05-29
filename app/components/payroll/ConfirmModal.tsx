@@ -4,6 +4,7 @@ type ConfirmModalProps = {
   uploadType: UploadType;
   employeeCount: number;
   isDispatching: boolean;
+  progressPercent?: number;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -43,7 +44,25 @@ export default function ConfirmModal({
               isDispatching ? "bg-slate-400" : "bg-slate-900"
             }`}
           >
-            {isDispatching ? "Processing..." : "Confirm"}
+            {isDispatching ? (
+              uploadType === "employees" ? (
+                <span className="flex items-center gap-3">
+                  <div className="w-40">
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
+                      <div
+                        className="h-full rounded-full bg-white transition-all duration-300"
+                        style={{ width: `${progressPercent ?? 0}%` }}
+                      />
+                    </div>
+                  </div>
+                  <span>{progressPercent ?? 0}%</span>
+                </span>
+              ) : (
+                "Processing..."
+              )
+            ) : (
+              "Confirm"
+            )}
           </button>
         </div>
       </div>

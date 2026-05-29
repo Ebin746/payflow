@@ -7,6 +7,7 @@ import ConfirmModal from "@/app/components/payroll/ConfirmModal";
 import LiveDispatchPanel from "@/app/components/payroll/LiveDispatchPanel";
 import PreviewTables from "@/app/components/payroll/PreviewTables";
 import RowEditModal from "@/app/components/payroll/RowEditModal";
+import Landing from "@/app/components/Landing";
 
 type UploadPreview = {
   columns: string[];
@@ -199,7 +200,7 @@ function validateRows(
 }
 
 export default function Home() {
-  const [uploadType, setUploadType] = useState<UploadType>("salary");
+  const [uploadType, setUploadType] = useState<UploadType>("employees");
   const [isDragging, setIsDragging] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<UploadPreview | null>(null);
@@ -543,7 +544,7 @@ export default function Home() {
     }
   }
 
-  function handleReupload() {
+  function handleReupload(shouldScroll = true) {
     setSelectedFile(null);
     setPreview(null);
     setMissingColumns([]);
@@ -564,9 +565,11 @@ export default function Home() {
     setIsDispatching(false);
     setShowConfirmModal(false);
     setDispatchLocked(false);
-    requestAnimationFrame(() => {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    });
+    if (shouldScroll) {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    }
   }
 
   function handleUploadTypeChange(type: UploadType) {
@@ -574,7 +577,8 @@ export default function Home() {
       return;
     }
     setUploadType(type);
-    handleReupload();
+    // clear preview/state but don't scroll to top when switching upload type
+    handleReupload(false);
   }
 
   const extension = selectedFile ? getExtension(selectedFile.name) : "";
@@ -812,22 +816,17 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(252,252,250,1)_0%,_rgba(240,243,248,1)_45%,_rgba(230,236,244,1)_100%)]">
+      <Landing previewRef={previewRef} />
       <div
         className={`mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-12 lg:px-10 overflow-x-hidden ${
           preview ? "pb-32" : ""
         }`}
       >
         <header className="flex flex-col gap-3">
-          <p className="text-sm uppercase tracking-[0.3em] text-slate-500">
-            Payroll Console
-          </p>
-          <h1 className="text-3xl font-display font-semibold tracking-tight text-slate-900 sm:text-4xl">
-            Upload payroll data, validate, and preview slips
+          <h1 className="text-2xl font-display font-semibold tracking-tight text-slate-900 sm:text-3xl">
+            Automate payroll uploads & dispatch
           </h1>
-          <p className="max-w-2xl text-base text-slate-600">
-            Drag in your payroll workbook to validate columns, inspect the
-            preview table, and confirm only when everything checks out.
-          </p>
+          {/* Steps moved to Landing component to keep layout consistent */}
         </header>
 
         {missingColumns.length > 0 && (
@@ -871,12 +870,8 @@ export default function Home() {
             <div className="flex flex-col gap-6">
               <div>
                 <h2 className="text-lg font-display font-semibold text-slate-900">
-                  Instructions
+                  Upload & Preview
                 </h2>
-                <p className="mt-2 text-sm text-slate-600">
-                  Upload a CSV or XLSX file. We will extract the first sheet and
-                  validate required columns before previewing.
-                </p>
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
@@ -943,11 +938,7 @@ export default function Home() {
                 </div>
               </details>
 
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 p-4 text-xs text-slate-500">
-                {uploadType === "employees"
-                  ? "Tip: Keep employee columns in lowercase and avoid empty header rows."
-                  : "Tip: Keep the salary slip columns in lowercase and avoid empty header rows."}
-              </div>
+              {/* tip removed per request */}
             </div>
           </div>
 
@@ -1097,6 +1088,7 @@ export default function Home() {
           missingColumnsCount={missingColumns.length}
           hasBlockingIssues={hasBlockingIssues}
           dispatchLocked={dispatchLocked}
+          progressPercent={progressPercent}
           onReupload={handleReupload}
           onOpenConfirm={() => setShowConfirmModal(true)}
         />
@@ -1107,6 +1099,7 @@ export default function Home() {
           uploadType={uploadType}
           employeeCount={employeeCount}
           isDispatching={isDispatching}
+          progressPercent={progressPercent}
           onCancel={() => setShowConfirmModal(false)}
           onConfirm={handleDispatch}
         />
@@ -1121,58 +1114,76 @@ export default function Home() {
             ? preview.rows[editRowIndex]
             : null
         }
-        nonEditableColumns={["employee_id", "name", "email"]}
+        nonEditableColumns={[]}
         onCancel={() => setEditRowIndex(null)}
         onSave={handleSaveRow}
       />
 
-      {isDispatching && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/15">
-          <div className="w-[300px] rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700 shadow-lg">
-            <div className="flex items-center gap-3">
-              <div className="relative flex h-9 w-9 items-center justify-center">
-                <div className="absolute h-full w-full rounded-full border border-slate-200" />
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-slate-900" />
-                <div className="absolute h-4 w-4 animate-pulse rounded-full bg-slate-900/10" />
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                  Dispatching
-                </p>
-                <p className="text-sm font-semibold text-slate-700">
-                  Processing... {progressPercent}%
-                </p>
-              </div>
-            </div>
-            <div className="mt-4">
-              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className="h-full rounded-full bg-slate-900 transition-all duration-300"
-                  style={{ width: `${progressPercent}%` }}
-                />
-                <div className="-mt-2 h-2 w-full animate-pulse bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-              </div>
-              <p className="mt-2 text-[11px] text-slate-500">
-                {dispatchProgress.processed}/{dispatchProgress.total} processed
-              </p>
-            </div>
-            <div className="mt-4 grid gap-2">
-              <div className="flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs">
-                <span className="text-emerald-600">Sent</span>
-                <span className="font-semibold text-emerald-700">{sentCount}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs">
-                <span className="text-rose-600">Failed</span>
-                <span className="font-semibold text-rose-700">{failedCount}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs">
-                <span className="text-amber-600">Skipped</span>
-                <span className="font-semibold text-amber-700">{skippedCount}</span>
+      {isDispatching &&
+        (uploadType === "employees" ? (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/8">
+            <div className="w-[420px] rounded-xl border border-sky-100 bg-gradient-to-b from-white to-sky-50 px-4 py-3 text-sm text-slate-700 shadow-lg">
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <p className="text-xs font-semibold text-slate-600">Saving employees</p>
+                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-sky-100">
+                    <div
+                      className="h-full rounded-full bg-sky-500 transition-all duration-300"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="text-sm font-semibold text-slate-700">{progressPercent}%</div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/15">
+            <div className="w-[300px] rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700 shadow-lg">
+              <div className="flex items-center gap-3">
+                <div className="relative flex h-9 w-9 items-center justify-center">
+                  <div className="absolute h-full w-full rounded-full border border-slate-200" />
+                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-slate-900" />
+                  <div className="absolute h-4 w-4 animate-pulse rounded-full bg-slate-900/10" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                    Dispatching
+                  </p>
+                  <p className="text-sm font-semibold text-slate-700">
+                    Processing... {progressPercent}%
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-slate-900 transition-all duration-300"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                  <div className="-mt-2 h-2 w-full animate-pulse bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+                </div>
+                <p className="mt-2 text-[11px] text-slate-500">
+                  {dispatchProgress.processed}/{dispatchProgress.total} processed
+                </p>
+              </div>
+              <div className="mt-4 grid gap-2">
+                <div className="flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs">
+                  <span className="text-emerald-600">Sent</span>
+                  <span className="font-semibold text-emerald-700">{sentCount}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs">
+                  <span className="text-rose-600">Failed</span>
+                  <span className="font-semibold text-rose-700">{failedCount}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs">
+                  <span className="text-amber-600">Skipped</span>
+                  <span className="font-semibold text-amber-700">{skippedCount}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
     </div>
   );
 }

@@ -7,6 +7,7 @@ type BottomBarProps = {
   missingColumnsCount: number;
   hasBlockingIssues: boolean;
   dispatchLocked: boolean;
+  progressPercent?: number;
   onReupload: () => void;
   onOpenConfirm: () => void;
 };
@@ -57,10 +58,24 @@ export default function BottomBar({
               }`}
             >
               {isDispatching ? (
-                <span className="inline-flex items-center gap-2">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-white" />
-                  Processing...
-                </span>
+                uploadType === "employees" ? (
+                  <span className="flex w-full items-center gap-3">
+                    <div className="flex-1">
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
+                        <div
+                          className="h-full rounded-full bg-white transition-all duration-300"
+                          style={{ width: `${progressPercent ?? 0}%` }}
+                        />
+                      </div>
+                    </div>
+                    <span className="text-sm font-semibold">{progressPercent ?? 0}%</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-white" />
+                    Processing...
+                  </span>
+                )
               ) : (
                 <span>
                   {uploadType === "employees"
