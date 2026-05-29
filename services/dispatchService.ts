@@ -24,6 +24,12 @@ type DispatchResultItem = {
   error?: string;
 };
 
+type DispatchProgressUpdate = {
+  processed: number;
+  total: number;
+  result: DispatchResultItem;
+};
+
 const NUMBER_FIELDS = [
   "base_salary",
   "hra",
@@ -99,7 +105,10 @@ function parseRow(row: RawRow) {
   return { employee_id, salaryRecord };
 }
 
-export async function dispatchSalaryUpload(rows: RawRow[]) {
+export async function dispatchSalaryUploadWithProgress(
+  rows: RawRow[],
+  onProgress?: (update: DispatchProgressUpdate) => void | Promise<void>
+) {
   if (rows.length === 0) {
     throw new Error("No rows to dispatch.");
   }
@@ -118,10 +127,12 @@ export async function dispatchSalaryUpload(rows: RawRow[]) {
 
   const companyName = process.env.COMPANY_NAME ?? "Company";
 
+  let processed = 0;
+
   for (const parsed of parsedRows) {
     const employee = employeeMap.get(parsed.employee_id);
     if (!employee) {
-      results.push({
+      const result = {
         employee_id: parsed.employee_id,
         name: "",
         email: "",
@@ -129,7 +140,13 @@ export async function dispatchSalaryUpload(rows: RawRow[]) {
         year: parsed.salaryRecord.year,
         success: false,
         error: "Employee not found in master data.",
-      });
+      } satisfies DispatchResultItem;
+
+      results.push(result);
+      processed += 1;
+      if (onProgress) {
+        await onProgress({ processed, total: parsedRows.length, result });
+      }
       continue;
     }
 
@@ -149,17 +166,23 @@ export async function dispatchSalaryUpload(rows: RawRow[]) {
       });
 
       salaryRecordsToInsert.push(parsed.salaryRecord);
-      results.push({
+      const result = {
         employee_id: employee.employee_id,
         name: employee.name,
         email: employee.email,
         month: parsed.salaryRecord.month,
         year: parsed.salaryRecord.year,
         success: true,
-      });
+      } satisfies DispatchResultItem;
+
+      results.push(result);
+      processed += 1;
+      if (onProgress) {
+        await onProgress({ processed, total: parsedRows.length, result });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Dispatch failed";
-      results.push({
+      const result = {
         employee_id: employee.employee_id,
         name: employee.name,
         email: employee.email,
@@ -167,7 +190,13 @@ export async function dispatchSalaryUpload(rows: RawRow[]) {
         year: parsed.salaryRecord.year,
         success: false,
         error: message,
-      });
+      } satisfies DispatchResultItem;
+
+      results.push(result);
+      processed += 1;
+      if (onProgress) {
+        await onProgress({ processed, total: parsedRows.length, result });
+      }
     }
   }
 
@@ -180,4 +209,8 @@ export async function dispatchSalaryUpload(rows: RawRow[]) {
     salaryRecordsInserted,
     results,
   } satisfies DispatchResult;
+}
+
+export async function dispatchSalaryUpload(rows: RawRow[]) {
+  return dispatchSalaryUploadWithProgress(rows);
 }

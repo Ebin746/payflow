@@ -2,6 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import BottomBar from "@/app/components/payroll/BottomBar";
+import ConfirmModal from "@/app/components/payroll/ConfirmModal";
+import LiveDispatchPanel from "@/app/components/payroll/LiveDispatchPanel";
+import PreviewTables from "@/app/components/payroll/PreviewTables";
+
 type UploadPreview = {
   columns: string[];
   rows: Record<string, string | number | boolean | null>[];
@@ -20,12 +25,44 @@ type DispatchResultItem = {
 
 type UploadType = "salary" | "employees";
 
+type DispatchProgress = {
+  total: number;
+  processed: number;
+  success: number;
+  failed: number;
+  skipped: number;
+};
+
+type EmployeeLookup = {
+  name: string;
+  email: string;
+};
+
+type EmployeeLookupItem = EmployeeLookup & {
+  employee_id: string;
+};
+
+type RemovedRow = {
+  row: Record<string, string | number | boolean | null>;
+  reason: string;
+};
+
 const REQUIRED_COLUMNS = [
   "employee_id",
   "base_salary",
   "hra",
   "allowances",
   "deductions",
+  "month",
+  "year",
+];
+
+const NUMERIC_COLUMNS = [
+  "base_salary",
+  "hra",
+  "allowances",
+  "deductions",
+  "net_salary",
   "month",
   "year",
 ];
@@ -39,6 +76,8 @@ const EMPLOYEE_REQUIRED_COLUMNS = [
 
 const TABLE_COLUMNS = [
   { key: "employee_id", label: "Employee ID" },
+  { key: "name", label: "Name" },
+  { key: "email", label: "Email" },
   { key: "base_salary", label: "Base Salary" },
   { key: "hra", label: "HRA" },
   { key: "allowances", label: "Allowances" },
@@ -76,15 +115,27 @@ export default function Home() {
   const [preview, setPreview] = useState<UploadPreview | null>(null);
   const [missingColumns, setMissingColumns] = useState<string[]>([]);
   const [missingEmployees, setMissingEmployees] = useState<string[]>([]);
+  const [employeeLookup, setEmployeeLookup] = useState<
+    Record<string, EmployeeLookup>
+  >({});
+  const [isEmployeeLookupLoading, setIsEmployeeLookupLoading] = useState(false);
+  const [removedRows, setRemovedRows] = useState<RemovedRow[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isDispatching, setIsDispatching] = useState(false);
+  const [dispatchLocked, setDispatchLocked] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [dispatchMessage, setDispatchMessage] = useState<string | null>(null);
   const [dispatchResults, setDispatchResults] = useState<DispatchResultItem[]>(
     []
   );
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [dispatchProgress, setDispatchProgress] = useState<DispatchProgress>({
+    total: 0,
+    processed: 0,
+    success: 0,
+    failed: 0,
+    skipped: 0,
+  });
   const [revealedCount, setRevealedCount] = useState(0);
   const [sortState, setSortState] = useState<SortState>({
     key: "employee_id",
@@ -112,10 +163,20 @@ export default function Home() {
     setPreview(null);
     setMissingColumns([]);
     setMissingEmployees([]);
+    setEmployeeLookup({});
+    setIsEmployeeLookupLoading(false);
+    setRemovedRows([]);
+    setDispatchLocked(false);
     setErrorMessage(null);
     setDispatchMessage(null);
     setDispatchResults([]);
-    setExpandedRows(new Set());
+    setDispatchProgress({
+      total: 0,
+      processed: 0,
+      success: 0,
+      failed: 0,
+      skipped: 0,
+    });
     setRevealedCount(0);
     setIsLoading(true);
 
@@ -139,7 +200,40 @@ export default function Home() {
       }
 
       const previewPayload = payload as UploadPreview;
-      setPreview(previewPayload);
+
+      if (uploadType === "salary") {
+        const validRows: UploadPreview["rows"] = [];
+        const removed: RemovedRow[] = [];
+
+        previewPayload.rows.forEach((row) => {
+          const invalidFields = NUMERIC_COLUMNS.filter((field) => {
+            const value = row[field];
+            if (value === null || value === undefined || value === "") {
+              return false;
+            }
+            const numericValue = Number(value);
+            return Number.isNaN(numericValue);
+          });
+
+          if (invalidFields.length > 0) {
+            removed.push({
+              row,
+              reason: `Invalid number in ${invalidFields.join(", ")}`,
+            });
+          } else {
+            validRows.push(row);
+          }
+        });
+
+        setRemovedRows(removed);
+        setPreview({
+          ...previewPayload,
+          rows: validRows,
+          totalRows: validRows.length,
+        });
+      } else {
+        setPreview(previewPayload);
+      }
 
       const missing = requiredColumns.filter(
         (column) => !previewPayload.columns.includes(column)
@@ -152,17 +246,33 @@ export default function Home() {
           .filter(Boolean);
 
         if (employeeIds.length > 0) {
-          const validateResponse = await fetch("/api/employees/validate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ employeeIds }),
-          });
-          const validatePayload = (await validateResponse.json()) as
-            | { missingEmployeeIds: string[] }
-            | { error: string };
+          setIsEmployeeLookupLoading(true);
+          try {
+            const validateResponse = await fetch("/api/employees/lookup", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ employeeIds }),
+            });
+            const validatePayload = (await validateResponse.json()) as
+              | { missingEmployeeIds: string[]; employees: EmployeeLookupItem[] }
+              | { error: string };
 
-          if (validateResponse.ok) {
-            setMissingEmployees(validatePayload.missingEmployeeIds ?? []);
+            if (validateResponse.ok) {
+              const employees = Array.isArray(validatePayload.employees)
+                ? validatePayload.employees
+                : [];
+              const lookup: Record<string, EmployeeLookup> = {};
+              employees.forEach((employee) => {
+                lookup[employee.employee_id] = {
+                  name: employee.name,
+                  email: employee.email,
+                };
+              });
+              setEmployeeLookup(lookup);
+              setMissingEmployees(validatePayload.missingEmployeeIds ?? []);
+            }
+          } finally {
+            setIsEmployeeLookupLoading(false);
           }
         }
       }
@@ -198,47 +308,145 @@ export default function Home() {
       return;
     }
 
+    setShowConfirmModal(false);
     setIsDispatching(true);
+    setDispatchLocked(true);
     setDispatchMessage(null);
+    setDispatchResults([]);
+    setDispatchProgress({
+      total: preview.rows.length,
+      processed: 0,
+      success: 0,
+      failed: 0,
+      skipped: 0,
+    });
 
     try {
-      const endpoint =
-        uploadType === "employees" ? "/api/employees" : "/api/dispatch";
-      const response = await fetch(endpoint, {
+      if (uploadType === "employees") {
+        const response = await fetch("/api/employees", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rows: preview.rows }),
+        });
+        const payload = (await response.json()) as
+          | { employeesUpserted?: number }
+          | { error: string };
+
+        if (!response.ok) {
+          const message = "error" in payload ? payload.error : "Dispatch failed";
+          throw new Error(message);
+        }
+
+        setDispatchMessage(
+          `Employee upload complete. ${payload.employeesUpserted ?? 0} records saved.`
+        );
+        return;
+      }
+
+      const response = await fetch("/api/dispatch/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rows: preview.rows }),
       });
-      const payload = (await response.json()) as
-        | {
-            matchedEmployees?: number;
-            results?: DispatchResultItem[];
-            employeesUpserted?: number;
-          }
-        | { error: string };
 
-      console.log("dispatch response", payload);
-
-      if (!response.ok) {
-        const message = "error" in payload ? payload.error : "Dispatch failed";
-        throw new Error(message);
+      if (!response.ok || !response.body) {
+        const payload = (await response.json()) as { error?: string };
+        throw new Error(payload.error ?? "Dispatch failed");
       }
 
-      if (uploadType === "employees") {
-        setDispatchResults([]);
-        setDispatchMessage(
-          `Employee upload complete. ${payload.employeesUpserted ?? 0} records saved.`
-        );
-      } else {
-        if (!payload.results) {
-          throw new Error("Dispatch response missing results.");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      const handleEvent = (rawEvent: string) => {
+        if (!rawEvent.trim()) {
+          return;
         }
 
-        setDispatchResults(payload.results);
-        const successCount = payload.results.filter((item) => item.success).length;
-        setDispatchMessage(
-          `Dispatch complete. ${successCount} sent, ${payload.results.length - successCount} failed.`
-        );
+        let eventName = "message";
+        const dataLines: string[] = [];
+
+        rawEvent.split("\n").forEach((line) => {
+          if (line.startsWith("event:")) {
+            eventName = line.slice(6).trim();
+          }
+          if (line.startsWith("data:")) {
+            dataLines.push(line.slice(5).trim());
+          }
+        });
+
+        const dataText = dataLines.join("\n");
+        if (!dataText) {
+          return;
+        }
+
+        let payload: Record<string, unknown> = {};
+        try {
+          payload = JSON.parse(dataText) as Record<string, unknown>;
+        } catch {
+          return;
+        }
+
+        if (eventName === "init") {
+          setDispatchProgress((current) => ({
+            ...current,
+            total: Number(payload.total ?? current.total),
+          }));
+          return;
+        }
+
+        if (eventName === "progress") {
+          const result = payload.result as DispatchResultItem | undefined;
+          const processed = Number(payload.processed ?? 0);
+          if (result) {
+            setDispatchResults((current) => [...current, result]);
+            setDispatchProgress((current) => {
+              const isSkipped =
+                !result.success && result.error?.includes("not found");
+              return {
+                ...current,
+                processed,
+                success: current.success + (result.success ? 1 : 0),
+                failed:
+                  current.failed + (!result.success && !isSkipped ? 1 : 0),
+                skipped: current.skipped + (isSkipped ? 1 : 0),
+              };
+            });
+          }
+          return;
+        }
+
+        if (eventName === "complete") {
+          const successCount = Number(payload.successCount ?? 0);
+          const failedCount = Number(payload.failedCount ?? 0);
+          setDispatchMessage(
+            `Dispatch complete. ${successCount} sent, ${failedCount} failed.`
+          );
+          return;
+        }
+
+        if (eventName === "error") {
+          const message =
+            typeof payload.message === "string"
+              ? payload.message
+              : "Dispatch failed";
+          setDispatchMessage(message);
+        }
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+        parts.forEach(handleEvent);
+      }
+
+      if (buffer.trim()) {
+        handleEvent(buffer);
       }
 
     } catch (error) {
@@ -246,7 +454,6 @@ export default function Home() {
       setDispatchMessage(message);
     } finally {
       setIsDispatching(false);
-      setShowConfirmModal(false);
     }
   }
 
@@ -274,11 +481,18 @@ export default function Home() {
     setErrorMessage(null);
     setDispatchMessage(null);
     setDispatchResults([]);
-    setExpandedRows(new Set());
+    setDispatchProgress({
+      total: 0,
+      processed: 0,
+      success: 0,
+      failed: 0,
+      skipped: 0,
+    });
     setRevealedCount(0);
     setIsLoading(false);
     setIsDispatching(false);
     setShowConfirmModal(false);
+    setDispatchLocked(false);
     requestAnimationFrame(() => {
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
@@ -293,7 +507,6 @@ export default function Home() {
   }
 
   const extension = selectedFile ? getExtension(selectedFile.name) : "";
-  const warningCount = uploadType === "salary" ? missingEmployees.length : 0;
   const employeeCount = preview?.rows.length ?? 0;
   const totalResults = dispatchResults.length;
   const sentCount = dispatchResults.filter((item) => item.success).length;
@@ -303,7 +516,13 @@ export default function Home() {
   ).length;
   const allSent = totalResults > 0 && failedCount === 0;
   const showLivePanel =
-    uploadType === "salary" && (isDispatching || dispatchResults.length > 0);
+    uploadType === "salary" && !isDispatching && dispatchResults.length > 0;
+  const progressPercent =
+    dispatchProgress.total === 0
+      ? 0
+      : Math.round(
+          (dispatchProgress.processed / dispatchProgress.total) * 100
+        );
 
   function handleDownloadReport() {
     if (dispatchResults.length === 0) {
@@ -341,31 +560,43 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }
 
-  function toggleExpandedRow(key: string) {
-    setExpandedRows((current) => {
-      const next = new Set(current);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  }
+  const rowEmployeeIdSet = useMemo(() => {
+    if (!preview || uploadType !== "salary") {
+      return new Set<string>();
+    }
+    return new Set(
+      preview.rows
+        .map((row) => String(row.employee_id ?? "").trim())
+        .filter(Boolean)
+    );
+  }, [preview, uploadType]);
 
-  const missingEmployeeSet = useMemo(
-    () => new Set(missingEmployees),
-    [missingEmployees]
-  );
+  const missingEmployeeSet = useMemo(() => {
+    if (uploadType !== "salary") {
+      return new Set<string>();
+    }
+    return new Set(
+      missingEmployees.filter((employeeId) => rowEmployeeIdSet.has(employeeId))
+    );
+  }, [missingEmployees, rowEmployeeIdSet, uploadType]);
+
+  const warningCountForPreview =
+    uploadType === "salary" ? missingEmployeeSet.size : 0;
 
   const sortedRows = useMemo(() => {
     if (!preview) {
       return [];
     }
-    const rowsCopy = [...preview.rows];
+    const rowsCopy = preview.rows.map((row, index) => ({
+      row,
+      index,
+    }));
     const { key, direction } = sortState;
 
     const getSortableValue = (row: UploadPreview["rows"][number]) => {
+      if (key === "name" || key === "email") {
+        return employeeLookup[String(row.employee_id ?? "")]?.[key] ?? "";
+      }
       if (key === "net_salary") {
         if (row.net_salary !== null && row.net_salary !== undefined) {
           return Number(row.net_salary);
@@ -381,8 +612,8 @@ export default function Home() {
     };
 
     rowsCopy.sort((a, b) => {
-      const valueA = getSortableValue(a);
-      const valueB = getSortableValue(b);
+      const valueA = getSortableValue(a.row);
+      const valueB = getSortableValue(b.row);
       const numericA = Number(valueA);
       const numericB = Number(valueB);
       const bothNumeric = !Number.isNaN(numericA) && !Number.isNaN(numericB);
@@ -403,7 +634,28 @@ export default function Home() {
     });
 
     return rowsCopy;
-  }, [preview, sortState]);
+  }, [preview, sortState, employeeLookup]);
+
+  function handleRemoveRow(rowIndex: number) {
+    let removedRow: UploadPreview["rows"][number] | undefined;
+
+    setPreview((current) => {
+      if (!current) {
+        return current;
+      }
+      removedRow = current.rows[rowIndex];
+      const nextRows = current.rows.filter((_, index) => index !== rowIndex);
+      setDispatchLocked(false);
+      return { ...current, rows: nextRows, totalRows: nextRows.length };
+    });
+
+    if (removedRow) {
+      setRemovedRows((previous) => [
+        { row: removedRow, reason: "Removed manually" },
+        ...previous,
+      ]);
+    }
+  }
 
   useEffect(() => {
     if (dispatchResults.length === 0) {
@@ -411,7 +663,6 @@ export default function Home() {
       return;
     }
 
-    setRevealedCount(0);
     const intervalId = window.setInterval(() => {
       setRevealedCount((current) => {
         if (current >= dispatchResults.length) {
@@ -423,7 +674,7 @@ export default function Home() {
     }, 220);
 
     return () => window.clearInterval(intervalId);
-  }, [dispatchResults]);
+  }, [dispatchResults.length]);
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(252,252,250,1)_0%,_rgba(240,243,248,1)_45%,_rgba(230,236,244,1)_100%)]">
@@ -617,8 +868,8 @@ export default function Home() {
                     FILE
                   </span>
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-slate-900">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-900">
                     {selectedFile.name}
                   </p>
                   <p className="text-xs text-slate-500">
@@ -646,343 +897,111 @@ export default function Home() {
         <section
           ref={previewRef}
           className={`grid gap-6 ${
-            showLivePanel ? "lg:grid-cols-[1.4fr_0.9fr]" : "lg:grid-cols-1"
+            showLivePanel
+              ? "lg:grid-cols-[minmax(0,1fr)_360px]"
+              : "lg:grid-cols-1"
           }`}
         >
-          <div className="space-y-4 transition-all duration-500">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-xl font-display font-semibold text-slate-900">
-                Preview table
-              </h2>
-              {preview && (
-                <span className="text-sm text-slate-500">
-                  {employeeCount} rows · {warningCount} warning
-                  {warningCount === 1 ? "" : "s"}
-                </span>
-              )}
-            </div>
-
-            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_60px_-48px_rgba(15,23,42,0.6)]">
-              {preview ? (
-                <div className="max-h-[520px] overflow-auto">
-                  {uploadType === "salary" ? (
-                    <table className="min-w-full border-collapse text-left text-sm">
-                      <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                        <tr>
-                          {TABLE_COLUMNS.map((column) => (
-                            <th
-                              key={column.key}
-                              className="border-b border-slate-200 px-4 py-3 font-semibold"
-                            >
-                              <button
-                                type="button"
-                                onClick={() => handleSort(column.key)}
-                                className="flex items-center gap-2"
-                              >
-                                {column.label}
-                                {sortState.key === column.key && (
-                                  <span className="text-[10px] text-slate-400">
-                                    {sortState.direction === "asc" ? "A-Z" : "Z-A"}
-                                  </span>
-                                )}
-                              </button>
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sortedRows.map((row, rowIndex) => {
-                          const employeeId = String(row.employee_id ?? "");
-                          const isMissing = missingEmployeeSet.has(employeeId);
-                          const netSalary =
-                            typeof row.net_salary === "number"
-                              ? row.net_salary
-                              : Number(row.base_salary ?? 0) +
-                                Number(row.hra ?? 0) +
-                                Number(row.allowances ?? 0) -
-                                Number(row.deductions ?? 0);
-
-                          return (
-                            <tr
-                              key={`${rowIndex}-${employeeId || rowIndex}`}
-                              className="odd:bg-white even:bg-slate-50/60"
-                            >
-                              {TABLE_COLUMNS.map((column) => {
-                                const value =
-                                  column.key === "net_salary"
-                                    ? netSalary
-                                    : row[column.key];
-                                const cellClass =
-                                  column.key === "net_salary"
-                                    ? "bg-emerald-50/60 text-emerald-800"
-                                    : "text-slate-700";
-
-                                return (
-                                  <td
-                                    key={`${rowIndex}-${column.key}`}
-                                    className={`border-b border-slate-100 px-4 py-3 ${cellClass}`}
-                                  >
-                                    {column.key === "employee_id" ? (
-                                      <div className="flex items-center gap-2">
-                                        <span>{String(value ?? "")}</span>
-                                        {isMissing && (
-                                          <span
-                                            title="This employee ID was not found. They will be skipped."
-                                            className="text-amber-500"
-                                          >
-                                            ⚠️
-                                          </span>
-                                        )}
-                                      </div>
-                                    ) : (
-                                      String(value ?? "")
-                                    )}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <table className="min-w-full border-collapse text-left text-sm">
-                      <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                        <tr>
-                          {preview.columns.map((column) => (
-                            <th
-                              key={column}
-                              className="border-b border-slate-200 px-4 py-3 font-semibold"
-                            >
-                              {column}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {preview.rows.map((row, rowIndex) => (
-                          <tr
-                            key={`employee-${rowIndex}`}
-                            className="odd:bg-white even:bg-slate-50/60"
-                          >
-                            {preview.columns.map((column) => (
-                              <td
-                                key={`${rowIndex}-${column}`}
-                                className="border-b border-slate-100 px-4 py-3 text-slate-700"
-                              >
-                                {String(row[column] ?? "")}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center text-sm text-slate-500">
-                  Upload a file to preview the data.
-                </div>
-              )}
-            </div>
-          </div>
+          <PreviewTables
+            preview={preview}
+            uploadType={uploadType}
+            warningCountForPreview={warningCountForPreview}
+            employeeCount={employeeCount}
+            isEmployeeLookupLoading={isEmployeeLookupLoading}
+            sortedRows={sortedRows}
+            tableColumns={TABLE_COLUMNS}
+            sortState={sortState}
+            employeeLookup={employeeLookup}
+            missingEmployeeSet={missingEmployeeSet}
+            removedRows={removedRows}
+            onSort={handleSort}
+            onRemoveRow={handleRemoveRow}
+          />
 
           {showLivePanel && (
-            <aside
+            <LiveDispatchPanel
               ref={summaryRef}
-              className="space-y-4 rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.5)] backdrop-blur"
-            >
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-display font-semibold text-slate-900">
-                  Live dispatch
-                </h3>
-                <span className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                  {revealedCount}/{dispatchResults.length}
-                </span>
-              </div>
-
-              <div className="grid gap-3">
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-500">
-                    Total Sent
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-emerald-700">
-                    {sentCount}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-rose-500">
-                    Failed
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-rose-700">
-                    {failedCount}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-amber-500">
-                    Skipped / Not Found
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-amber-700">
-                    {skippedCount}
-                  </p>
-                </div>
-              </div>
-
-              {allSent && (
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 shadow-sm">
-                  All slips sent successfully.
-                </div>
-              )}
-
-              {isDispatching && dispatchResults.length === 0 && (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                  Dispatch in progress. Updates will appear here.
-                </div>
-              )}
-
-              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-                  <span>Live updates</span>
-                  <span>{dispatchResults.length} total</span>
-                </div>
-                <div className="mt-3 max-h-56 space-y-2 overflow-auto pr-1">
-                  {dispatchResults.slice(0, revealedCount).map((item, index) => {
-                    const isSkipped =
-                      !item.success && item.error?.includes("not found");
-                    const statusLabel = item.success
-                      ? "Sent"
-                      : isSkipped
-                        ? "Skipped"
-                        : "Failed";
-                    const statusClass = item.success
-                      ? "text-emerald-600"
-                      : isSkipped
-                        ? "text-amber-600"
-                        : "text-rose-600";
-
-                    return (
-                      <div
-                        key={`${item.employee_id}-${index}`}
-                        className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs"
-                      >
-                        <div>
-                          <p className="font-semibold text-slate-700">
-                            {item.employee_id || "Unknown"}
-                          </p>
-                          <p className="text-slate-500">{item.name}</p>
-                        </div>
-                        <span className={`font-semibold ${statusClass}`}>
-                          {statusLabel}
-                        </span>
-                      </div>
-                    );
-                  })}
-                  {dispatchResults.length === 0 && (
-                    <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400">
-                      Waiting for results...
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3">
-                <button
-                  type="button"
-                  onClick={handleDownloadReport}
-                  disabled={dispatchResults.length === 0}
-                  className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
-                    dispatchResults.length === 0
-                      ? "border-slate-200 text-slate-300"
-                      : "border-slate-300 text-slate-700 hover:border-slate-400"
-                  }`}
-                >
-                  Download Report (CSV)
-                </button>
-                <button
-                  type="button"
-                  onClick={handleReupload}
-                  className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-                >
-                  Start New Batch
-                </button>
-              </div>
-            </aside>
+              revealedCount={revealedCount}
+              dispatchResults={dispatchResults}
+              dispatchProgress={dispatchProgress}
+              progressPercent={progressPercent}
+              sentCount={sentCount}
+              failedCount={failedCount}
+              skippedCount={skippedCount}
+              allSent={allSent}
+              isDispatching={isDispatching}
+              onDownloadReport={handleDownloadReport}
+              onReupload={handleReupload}
+            />
           )}
         </section>
       </div>
 
       {preview && (
-        <div className="fixed bottom-0 left-0 right-0 border-t border-slate-200 bg-white/90 px-6 py-4 shadow-[0_-20px_60px_-40px_rgba(15,23,42,0.6)] backdrop-blur">
-          <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3">
-            <span className="text-sm text-slate-500">
-              Review the table before confirming.
-            </span>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleReupload}
-                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400"
-              >
-                &larr; Re-upload
-              </button>
-              <button
-                type="button"
-                disabled={missingColumns.length > 0 || isLoading || isDispatching}
-                onClick={() => setShowConfirmModal(true)}
-                className={`rounded-full px-6 py-2 text-sm font-semibold text-white transition ${
-                  missingColumns.length > 0 || isLoading || isDispatching
-                    ? "bg-slate-400"
-                    : "bg-slate-900 hover:-translate-y-0.5"
-                }`}
-              >
-                {isDispatching ? (
-                  <span className="inline-flex items-center gap-2">
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-white" />
-                    Processing...
-                  </span>
-                ) : (
-                  <span>
-                    {uploadType === "employees"
-                      ? "Confirm &amp; Save Employees →"
-                      : "Confirm &amp; Dispatch →"}
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+        <BottomBar
+          uploadType={uploadType}
+          isDispatching={isDispatching}
+          isLoading={isLoading}
+          missingColumnsCount={missingColumns.length}
+          dispatchLocked={dispatchLocked}
+          onReupload={handleReupload}
+          onOpenConfirm={() => setShowConfirmModal(true)}
+        />
       )}
 
       {showConfirmModal && preview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-6">
-          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.7)]">
-            <h3 className="text-lg font-display font-semibold text-slate-900">
-              Confirm {uploadType === "employees" ? "upload" : "dispatch"}
-            </h3>
-            <p className="mt-3 text-sm text-slate-600">
-              {uploadType === "employees"
-                ? `You are about to save ${employeeCount} employees to the master list.`
-                : `You are about to email ${employeeCount} employees. This cannot be undone.`}
-            </p>
-            <div className="mt-6 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowConfirmModal(false)}
-                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
-                disabled={isDispatching}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDispatch}
-                disabled={isDispatching}
-                className={`rounded-full px-5 py-2 text-sm font-semibold text-white ${
-                  isDispatching ? "bg-slate-400" : "bg-slate-900"
-                }`}
-              >
-                {isDispatching ? "Processing..." : "Confirm"}
-              </button>
+        <ConfirmModal
+          uploadType={uploadType}
+          employeeCount={employeeCount}
+          isDispatching={isDispatching}
+          onCancel={() => setShowConfirmModal(false)}
+          onConfirm={handleDispatch}
+        />
+      )}
+
+      {isDispatching && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/15">
+          <div className="w-[300px] rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700 shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="relative flex h-9 w-9 items-center justify-center">
+                <div className="absolute h-full w-full rounded-full border border-slate-200" />
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-slate-900" />
+                <div className="absolute h-4 w-4 animate-pulse rounded-full bg-slate-900/10" />
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                  Dispatching
+                </p>
+                <p className="text-sm font-semibold text-slate-700">
+                  Processing... {progressPercent}%
+                </p>
+              </div>
+            </div>
+            <div className="mt-4">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-slate-900 transition-all duration-300"
+                  style={{ width: `${progressPercent}%` }}
+                />
+                <div className="-mt-2 h-2 w-full animate-pulse bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+              </div>
+              <p className="mt-2 text-[11px] text-slate-500">
+                {dispatchProgress.processed}/{dispatchProgress.total} processed
+              </p>
+            </div>
+            <div className="mt-4 grid gap-2">
+              <div className="flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs">
+                <span className="text-emerald-600">Sent</span>
+                <span className="font-semibold text-emerald-700">{sentCount}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs">
+                <span className="text-rose-600">Failed</span>
+                <span className="font-semibold text-rose-700">{failedCount}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs">
+                <span className="text-amber-600">Skipped</span>
+                <span className="font-semibold text-amber-700">{skippedCount}</span>
+              </div>
             </div>
           </div>
         </div>
