@@ -1,225 +1,244 @@
-# Payflow
+# Payflow Console
 
-## Project Title
-Payflow Console — Payflow
-
-## Overview
-Payflow is a web application for automating payflow uploads, validation, PDF salary slip generation and email dispatch. It provides an admin-facing UI to upload employee or salary spreadsheets, preview and edit rows, validate required columns and fields, then generate and email personalized PDF salary slips to employees.
-
-## What the project does
-- Accepts CSV or XLSX uploads (first sheet extracted).
-- Validates required columns and data types.
-- Shows a preview table with inline row editing.
-- Generates dynamic PDF salary slips and dispatches them via email.
-- Streams salary dispatch progress and shows results.
-
-## Problem it solves
-Manual payflow email distribution is time-consuming, error-prone, and hard to audit. Payflow automates the parsing, validation, PDF generation, and email dispatch of salary slips, reducing manual effort and improving accuracy and traceability.
-
-## Key objectives
-- Fast, reliable bulk payflow processing.
-- Clear preview and validation before dispatch.
-- Simple setup and extensible architecture.
-
-## Live Demo
-- Live URL: (add your public URL here)
-- Demo Video URL: (link to demo video)
-- GitHub Repository URL: (add repository URL)
+Payflow Console is a web application for employee salary slip automation. It lets an admin upload employee master data and monthly payroll files in CSV or Excel format, preview and validate the records, generate salary slip PDFs, and email each employee their slip automatically. The app also includes live dispatch status monitoring so the admin can track the progress of each run.
 
 ## Features
-### Main functionalities
-- Upload CSV/XLSX files and extract first sheet.
-- Column and row validation with inline edit.
-- Employee lookup for missing records.
-- PDF salary slip generation per employee.
-- Email dispatch with per-recipient results and progress tracking.
-- Separate behaviors for `employees` and `salary` uploads.
 
-### Key highlights
-- Streamed dispatch pipeline to avoid blocking the UI.
-- Compact progress UI for employee uploads and streaming progress for salary dispatch.
-- Tailwind-driven responsive UI in Next.js app directory.
+- Upload employee master data and monthly salary dispatch files using CSV or Excel.
+- Preview uploaded data in a structured table before processing it.
+- Validate required columns and highlight missing or invalid values early.
+- Generate professional salary slip PDFs for each employee.
+- Send salary slips automatically by email and monitor live dispatch status.
+- Stream live dispatch progress with Server-Sent Events (SSE).
+- Edit rows and columns directly in the preview table before dispatching.
 
 ## Tech Stack
-- Frontend: Next.js (App Router), React, TypeScript, Tailwind CSS
-- Backend: Next.js API routes (serverless-style endpoints)
-- Database: Supabase (Postgres) via `@supabase/supabase-js` (project includes `supabase/schema.sql`)
-- Email: `nodemailer` for SMTP dispatch
-- PDF: `muhammara` and `pdf-lib` for PDF generation/modification
-- File parsing: `xlsx` for CSV/XLSX parsing
 
-### Detected dependencies (from package.json)
-- @supabase/supabase-js
-- muhammara
-- next
-- nodemailer
-- pdf-lib
-- react, react-dom
-- react-hot-toast
-- xlsx
+- Next.js 16
+- React 19
+- TypeScript
+- Tailwind CSS
+- Supabase
+- Nodemailer
+- PDF generation with muhammara and pdf-lib
+- XLSX parsing for spreadsheet uploads
 
-### Dev dependencies
-- tailwindcss, @tailwindcss/postcss
-- typescript, ts-node
-- eslint
+## Architecture
 
-## System Architecture
-Payflow follows a simple web-frontend + serverless API pattern:
-- User uploads file from the UI → POST `/api/upload` handles parsing and validation → returns a preview JSON.
-- Admin reviews preview, edits rows (in-memory), then confirms.
-- For salary dispatch: the client opens a streaming connection to `/api/dispatch/stream` which returns per-record events and final summary.
-- The server builds PDFs (dynamic PDF engine) and sends emails via SMTP (Nodemailer).
+This project follows a layered architecture:
 
-### Architecture Diagram
-(Replace with a diagram image if available) 
-```
-[Upload UI] -> /api/upload -> [Validation] -> [Preview Table] -> /api/dispatch -> [PDF Engine] -> [SMTP] -> Email
-```
+- `app/` - Next.js app routes, pages, and UI components
+- `app/api/` - Thin API routes for upload, validation, employee lookup, and dispatch
+- `app/components/` - Presentation-focused React components
+- `services/` - Business logic for dispatch, PDF generation, email, and employee handling
+- `repositories/` - Database access layer
+- `lib/` - Shared utilities and Supabase client setup
+- `supabase/` - Database schema and SQL setup
+- `public/` - Static assets, sample CSV files, and screenshots
 
-## Folder Structure
-(Top-level important files and folders)
-```
-app/
-	page.tsx            # Main UI, upload flow, preview and dispatch wiring
-	components/
-		Landing.tsx
-		payflow/
-			PreviewTables.tsx
-			BottomBar.tsx
-			ConfirmModal.tsx
-			RowEditModal.tsx
-			LiveDispatchPanel.tsx
-lib/
-	supabase/server.ts
-repositories/
-	employeesRepository.ts
-	salaryRecordsRepository.ts
-services/
-	dispatchService.ts
-	employeesService.ts
-	generatePDF.ts
-	sendEmail.ts
-public/
-	preview/pdfExample.png (optional)
-supabase/
-	schema.sql
-package.json
-README.md
+### Directory Structure
+
+```text
+payflow/
+├── app/
+│   ├── api/
+│   ├── components/
+│   ├── globals.css
+│   ├── layout.tsx
+│   └── page.tsx
+├── lib/
+│   └── supabase/
+├── repositories/
+├── services/
+├── supabase/
+│   └── schema.sql
+└── public/
+	├── sample-csvs/
+	└── screenshots/
 ```
 
-## Application Flow
-1. Choose upload type: `employees` (master) or `salary` (payflow slips).
-2. Upload CSV/XLSX (first sheet extracted and validated against required columns).
-3. Preview data in a table, edit rows inline if needed.
-4. Confirm to dispatch: generate PDFs and send emails. For salary dispatch, progress is streamed and displayed.
+## Local Installation
 
-## Screenshots
-- Home Page: `app/page.tsx` (Header + upload panel)
-- Processing Page: Upload preview + Confirm modal
-- Results Dashboard: Dispatch results + Live dispatch panel
-- Generated PDF: (save a sample under `public/preview/pdfExample.png`)
+### Prerequisites
 
-## Database Design
-Tables (example from `supabase/schema.sql`):
-- `employees` (employee_id PK, name, email, designation, ...)
-- `salary_records` (id PK, employee_id FK, month, year, base_salary, hra, allowances, deductions, net_salary, status)
+- Node.js 20 LTS recommended
+- npm
+- A Supabase project
+- Gmail or another SMTP provider for email delivery
 
-Relationships: `salary_records.employee_id` -> `employees.employee_id`
+### 1. Clone the repository
 
-## API Documentation
-### Internal API Endpoints
-- `POST /api/upload` — Accepts file in form-data, parses first sheet, validates required columns, returns preview JSON.
-- `POST /api/employees/lookup` — Given a list of IDs, returns matching employee metadata and missing IDs.
-- `POST /api/employees` — Upsert employee master records (used when saving edited rows for `employees` uploads).
-- `POST /api/dispatch` — Start a dispatch job for salary upload (non-streaming).
-- `GET /api/dispatch/stream` — Streaming endpoint: returns per-record events and final summary while dispatching.
-- `POST /api/upload/validate` (internal helper) — Validate headers and sample rows.
-
-### External Services Used
-- SMTP server via Nodemailer (or any transactional email provider with SMTP)
-- Supabase (Postgres) for persistence and employee lookup
-
-## Prerequisites
-- Node.js 18+ (recommended)
-- Supabase account (for Postgres) or other Postgres-compatible DB
-- SMTP credentials (host, port, user, pass)
-
-## Installation Guide
-1. Clone repository
 ```bash
-git clone <repo-url>
+git clone https://github.com/Ebin746/payflow.git
 cd payflow
 ```
-2. Install dependencies
+
+If you are not already in the project root, make sure you change into the root directory before continuing.
+
+### 2. Install dependencies
+
 ```bash
 npm install
 ```
-3. Configure environment variables (see section below)
-4. Run database setup: apply `supabase/schema.sql` to your Postgres database
-5. Start development server
+
+### 3. Configure environment variables
+
+Create a `.env.local` file in the project root and copy the values from `.env.local.example`:
+
+```env
+SUPABASE_URL=
+SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SECRET_KEY=
+
+GMAIL_USER=
+GMAIL_APP_PASSWORD=
+EMAIL_FROM=
+COMPANY_NAME=
+```
+
+Fill in all required values before running the app.
+
+### 4. Set up the database
+
+1. Create a new Supabase project.
+2. Open the Supabase SQL editor.
+3. Run the SQL file at `supabase/schema.sql` to create the required tables:
+   - `employees`
+   - `salary_records`
+
+### 5. Start the development server
+
 ```bash
 npm run dev
 ```
 
-## Environment Variables
-Create a `.env` file in the project root with the following values:
+Then open the application at:
 
-- `NEXT_PUBLIC_SUPABASE_URL` — Supabase project URL
-- `SUPABASE_SERVICE_KEY` — Supabase service role key (server-side only)
-- `DATABASE_URL` — Postgres connection string (if used directly)
-- `SMTP_HOST` — SMTP server host
-- `SMTP_PORT` — SMTP server port
-- `SMTP_USER` — SMTP user
-- `SMTP_PASS` — SMTP password
-- `EMAIL_FROM` — Default from address for salary emails
-- `NEXTAUTH_URL` — (if authentication used)
+```text
+http://localhost:3000
+```
 
-## Dependencies
-(Extracted from `package.json`)
-- Production dependencies: `@supabase/supabase-js`, `muhammara`, `next`, `nodemailer`, `pdf-lib`, `react`, `react-dom`, `react-hot-toast`, `xlsx`
-- Dev dependencies: `tailwindcss`, `@tailwindcss/postcss`, `typescript`, `ts-node`, `eslint`
+## Using the Application
 
-## Security & Validation
-- Input validation: All uploaded files are parsed server-side and validated for required headers and types. Rows with missing required fields are flagged in the preview.
-- Credential management: Store secrets in environment variables and do not commit `.env` to version control.
-- File validation: Limit accepted file types to `.csv`, `.xls`, `.xlsx` and check file size before processing.
+- Use the sample data in `public/sample-csvs/` to test the workflow.
+- The upload card in the app shows the expected column format for each file type.
+- You can also download the dummy template files directly from the upload section.
+- The app supports employee master uploads and monthly salary dispatch uploads.
 
-## Performance Optimizations
-- Bulk processing: Dispatch handler batches PDF generation and email sending; streaming output prevents blocking and reduces client-side timeouts.
-- Database indexing: Add indexes on `employee_id`, `month`, `year` on `salary_records` for faster lookups.
-- Efficient PDF generation: Reuse templates and only fill per-employee fields rather than re-rendering full templates each time.
+### Expected Data
 
-## Assumptions & Limitations
-- Assumes CSV/XLSX files use consistent headers (lowercase recommended).
-- Large files may need server resources tuning; consider queueing or background workers for very large payflows.
+- Employee master upload: `employee_id`, `name`, `email`, `designation`
+- Salary dispatch upload: `employee_id`, `base_salary`, `hra`, `allowances`, `deductions`, `month`, `year`
 
-## Future Enhancements
-- Background job queue (e.g., BullMQ) for large dispatches.
-- Multi-tenant support and role-based access control.
-- Webhooks for delivery receipts and bounce handling.
-- Attach generated PDF archive for admin download.
+## Live Demo
 
-## Testing
-- Unit tests for parsing, validation and PDF generation.
-- Integration tests that mock SMTP to validate dispatch results.
-- Suggested test cases: missing columns, invalid emails, numeric parsing errors, large file handling.
+Access the deployed version here:
+
+https://payflow-console.vercel.app/
 
 ## Deployment
-### Hosting platform
-- Vercel for Next.js frontend + API routes (or any Node-friendly host)
-- External Postgres (Supabase) for persistence
 
-### Deployment steps
-1. Push code to GitHub
-2. Configure environment variables in the hosting provider
-3. Deploy via Vercel (connect repo) or use Docker to deploy to other platforms
+The application is deployed on Vercel and the live link above points to the production build.
 
----
+For deployment, make sure the following are configured in the Vercel project settings:
 
-If you want, I can also:
-- Add a diagram file for architecture (SVG/PNG) under `public/`.
-- Commit and push `README.md` and open a PR.
-- Start the dev server and run a smoke test.
+- `SUPABASE_URL`
+- `SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SECRET_KEY`
+- `GMAIL_USER`
+- `GMAIL_APP_PASSWORD`
+- `EMAIL_FROM`
+- `COMPANY_NAME`
 
----
-*Generated on 2026-05-29.*
+The Supabase database must also be created separately by running `supabase/schema.sql` in the SQL editor.
+
+## Screenshots
+
+### Home
+
+![Home](public/screenshots/landingPage.png)
+
+### Upload Table
+
+![Upload Table](public/screenshots/dataUpload.png)
+
+### Live Update
+
+![Live Update](public/screenshots/liveupdataion_table.png)
+
+### PDF Example
+
+![PDF Example](public/screenshots/pdfExampl1e.png)
+
+### Email Notification
+
+![Email Notification](public/screenshots/email.png)
+
+## Notes
+
+- The app uses Supabase for structured data storage.
+- Salary slips are generated dynamically and emailed to each employee as PDF attachments.
+- Live dispatch monitoring helps the admin track progress, success, and failure status during processing.
+- The dispatch UI uses SSE so the admin can see live status updates while processing runs.
+- Uploaded rows can be edited in the preview grid before final confirmation.
+
+## Database Tables
+
+Payflow uses two main tables in Supabase:
+
+### `employees`
+
+Stores the employee master data that is used as the source of truth for dispatching salary slips.
+
+| Column | Type | Description |
+| --- | --- | --- |
+| `employee_id` | `text` | Primary key. Unique identifier for each employee. |
+| `name` | `text` | Employee full name. |
+| `email` | `text` | Employee email address used for sending salary slips. |
+| `designation` | `text` | Job title or role. |
+| `birth_year` | `int` | Optional employee metadata. |
+
+### `salary_records`
+
+Stores the monthly salary information that is used to generate the PDF slip and compute the net salary.
+
+| Column | Type | Description |
+| --- | --- | --- |
+| `id` | `bigint` | Primary key. Auto-generated row identifier. |
+| `employee_id` | `text` | Foreign key referencing `employees.employee_id`. |
+| `base_salary` | `numeric(12, 2)` | Base salary amount. |
+| `hra` | `numeric(12, 2)` | House rent allowance. |
+| `allowances` | `numeric(12, 2)` | Additional allowances. |
+| `deductions` | `numeric(12, 2)` | Total deductions. |
+| `month` | `int` | Payroll month. |
+| `year` | `int` | Payroll year. |
+| `net_salary` | `numeric(12, 2)` | Final calculated salary amount. |
+
+### Relationships
+
+- `employees.employee_id` is the primary key for the employee master table.
+- `salary_records.employee_id` is a foreign key that references `employees.employee_id`.
+- This relationship ensures that every salary record belongs to a valid employee.
+- The app uses `employee_id` to look up employee details when processing monthly salary uploads.
+- Deleting an employee is restricted if salary records already exist for that employee.
+
+### Salary Calculation
+
+The PDF generation flow uses the following formula:
+
+```text
+Net Salary = (Base Salary + HRA + Allowances) - Deductions
+```
+
+This value is stored in `salary_records.net_salary` and used in the generated salary slip PDF.
+
+## Future Enhancements
+
+Planned improvements for scaling and reliability:
+
+- Batch processing for large payroll files.
+- Background job processing for PDF generation and email dispatch.
+- Queue-based worker execution to support higher volume usage.
+- Better retry handling and failure recovery for email delivery.
+- More detailed audit logs for admin actions and dispatch history.
+
