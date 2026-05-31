@@ -512,6 +512,7 @@ export default function Home() {
       setDispatchMessage(message);
     } finally {
       setIsDispatching(false);
+      setDispatchLocked(false);
     }
   }
 
@@ -579,7 +580,7 @@ export default function Home() {
     (item) => !item.success && isMissingRecordReason(item.error)
   ).length;
   const allSent = totalResults > 0 && failedCount === 0;
-  const showLivePanel = uploadType === "salary" && dispatchResults.length > 0;
+  const showLivePanel = uploadType === "salary" && (isDispatching || dispatchResults.length > 0);
   const progressPercent =
     dispatchProgress.total === 0
       ? 0

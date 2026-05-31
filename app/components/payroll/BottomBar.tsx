@@ -39,53 +39,53 @@ export default function BottomBar({
           >
             &larr; Re-upload
           </button>
-          {!dispatchLocked && (
-            <button
-              type="button"
-              disabled={
-                missingColumnsCount > 0 ||
-                hasBlockingIssues ||
-                isLoading ||
-                isDispatching
-              }
-              onClick={onOpenConfirm}
-              className={`w-full rounded-full px-6 py-2 text-sm font-semibold text-white transition sm:w-auto ${
-                missingColumnsCount > 0 ||
-                hasBlockingIssues ||
-                isLoading ||
-                isDispatching
-                  ? "bg-slate-400"
-                  : "bg-slate-900 hover:-translate-y-0.5"
-              }`}
-            >
-              {isDispatching ? (
-                uploadType === "employees" ? (
-                  <span className="flex w-full items-center gap-3">
-                    <div className="flex-1">
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
-                        <div
-                          className="h-full rounded-full bg-white transition-all duration-300"
-                          style={{ width: `${progressPercent ?? 0}%` }}
-                        />
-                      </div>
+          <button
+            type="button"
+            disabled={
+              missingColumnsCount > 0 ||
+              hasBlockingIssues ||
+              isLoading ||
+              isDispatching ||
+              dispatchLocked
+            }
+            onClick={onOpenConfirm}
+            className={`w-full rounded-full px-6 py-2 text-sm font-semibold text-white transition sm:w-auto ${
+              missingColumnsCount > 0 ||
+              hasBlockingIssues ||
+              isLoading ||
+              isDispatching ||
+              dispatchLocked
+                ? "bg-slate-400"
+                : "bg-slate-900 hover:-translate-y-0.5"
+            }`}
+          >
+            {isDispatching || dispatchLocked ? (
+              uploadType === "employees" ? (
+                <span className="flex w-full items-center gap-3">
+                  <div className="flex-1">
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
+                      <div
+                        className="h-full rounded-full bg-white transition-all duration-300"
+                        style={{ width: `${progressPercent ?? 0}%` }}
+                      />
                     </div>
-                    <span className="text-sm font-semibold">{progressPercent ?? 0}%</span>
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-2">
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-white" />
-                    Processing...
-                  </span>
-                )
-              ) : (
-                <span>
-                  {uploadType === "employees"
-                    ? "Save Employees →"
-                    : "Dispatch Payroll →"}
+                  </div>
+                  <span className="text-sm font-semibold">{progressPercent ?? 0}%</span>
                 </span>
-              )}
-            </button>
-          )}
+              ) : (
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-white" />
+                  Processing...
+                </span>
+              )
+            ) : (
+              <span>
+                {uploadType === "employees"
+                  ? "Save Employees →"
+                  : "Dispatch Payroll →"}
+              </span>
+            )}
+          </button>
         </div>
       </div>
     </div>
