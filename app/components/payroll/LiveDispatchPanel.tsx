@@ -95,7 +95,7 @@ const LiveDispatchPanel = forwardRef<HTMLDivElement, LiveDispatchPanelProps>(
     }, [visibleResults, sortDirection, sortKey]);
 
     return (
-    <aside
+      <aside
       ref={ref}
       className="space-y-4 rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-[0_20px_60px_-40px_rgba(15,23,42,0.5)] backdrop-blur"
     >
@@ -142,7 +142,7 @@ const LiveDispatchPanel = forwardRef<HTMLDivElement, LiveDispatchPanelProps>(
         </div>
         <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
           <p className="text-xs uppercase tracking-[0.2em] text-amber-500">
-            Skipped / Not Found
+            Skipped / Missing Record
           </p>
           <p className="mt-1 text-2xl font-semibold text-amber-700">
             {skippedCount}

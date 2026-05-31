@@ -119,7 +119,7 @@ export default function PreviewTables({
               )}
               {totalBatchCount > 1 && (
                 <span className="text-amber-700">
-                  Processing 20 rows at a time
+                  Reviewing records in 20-row dispatch sheets
                 </span>
               )}
               {uploadType === "salary" && isEmployeeLookupLoading && (
@@ -172,9 +172,9 @@ export default function PreviewTables({
           <div>
             <p className="font-semibold">Batch selection</p>
             <p className="mt-1 text-xs text-amber-800">
-              Due to current Next.js processing constraints, uploads are handled
-              in batches of 20 rows. Select a batch to review or dispatch the
-              first 20, second 20, third 20, and any remaining rows.
+              For dispatch control, uploads are handled in 20-row sheets.
+              Select a sheet to review or release the first 20, second 20,
+              third 20, and any remaining rows.
             </p>
           </div>
           <div className="flex items-center gap-2">

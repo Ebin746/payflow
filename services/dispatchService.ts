@@ -139,7 +139,7 @@ export async function dispatchSalaryUploadWithProgress(
         month: parsed.salaryRecord.month,
         year: parsed.salaryRecord.year,
         success: false,
-        error: "Employee not found in master data.",
+        error: "Employee master record not found in the dispatch register.",
       } satisfies DispatchResultItem;
 
       results.push(result);

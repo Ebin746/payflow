@@ -25,6 +25,8 @@ export async function sendSalarySlipEmail({
   const gmailUser = process.env.GMAIL_USER;
   const gmailAppPassword = process.env.GMAIL_APP_PASSWORD;
   const fromAddress = process.env.EMAIL_FROM ?? gmailUser;
+  const companyName = process.env.COMPANY_NAME ?? "Nippon Toyota";
+  const officeName = `${companyName} Salary Slip Dispatch Office`;
 
   if (!gmailUser || !gmailAppPassword || !fromAddress) {
     throw new Error("Missing Gmail email configuration.");
@@ -39,12 +41,14 @@ export async function sendSalarySlipEmail({
   });
 
   const monthLabel = `${month}`.padStart(2, "0");
-  const subject = `Salary Slip - ${monthLabel}/${year}`;
+  const subject = `${companyName} Salary Slip - ${monthLabel}/${year}`;
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #222;">
-      <p>Hi ${name},</p>
-      <p>Please find your salary slip for <strong>${monthLabel}/${year}</strong> attached.</p>
-      <p>Regards,<br />Payflow Team</p>
+      <p>Dear ${name},</p>
+      <p>Please find attached your salary slip for <strong>${monthLabel}/${year}</strong>.</p>
+      <p>This communication has been issued by the <strong>${officeName}</strong> for official payroll records.</p>
+      <p>If you notice any discrepancy, please contact the payroll office for review.</p>
+      <p>Regards,<br />${officeName}</p>
     </div>
   `;
 

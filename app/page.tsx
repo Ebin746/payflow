@@ -64,6 +64,30 @@ const EMPLOYEE_REQUIRED_COLUMNS = [
   "designation",
 ];
 
+function isMissingRecordReason(reason?: string) {
+  return Boolean(reason && /not found/i.test(reason));
+}
+
+function formatDispatchReason(reason?: string) {
+  if (!reason) {
+    return "";
+  }
+
+  if (/not found/i.test(reason)) {
+    return "Employee master record is not available in the dispatch register.";
+  }
+
+  if (/Missing Gmail email configuration/i.test(reason)) {
+    return "Email delivery settings are incomplete for this dispatch.";
+  }
+
+  if (/Dispatch failed/i.test(reason)) {
+    return "Dispatch could not be completed for this record. Please review the payroll entry and try again.";
+  }
+
+  return reason.endsWith(".") ? reason : `${reason}.`;
+}
+
 const SAMPLE_CSV_FILES: Record<UploadType, { href: string; download: string }> = {
   employees: {
     href: "/sample-csvs/employees-sample.csv",
@@ -513,8 +537,7 @@ export default function Home() {
           if (result) {
             setDispatchResults((current) => [...current, result]);
             setDispatchProgress((current) => {
-              const isSkipped =
-                !result.success && result.error?.includes("not found");
+              const isSkipped = !result.success && isMissingRecordReason(result.error);
               return {
                 ...current,
                 processed,
@@ -631,7 +654,7 @@ export default function Home() {
   const sentCount = dispatchResults.filter((item) => item.success).length;
   const failedCount = dispatchResults.filter((item) => !item.success).length;
   const skippedCount = dispatchResults.filter(
-    (item) => !item.success && item.error?.includes("not found")
+    (item) => !item.success && isMissingRecordReason(item.error)
   ).length;
   const allSent = totalResults > 0 && failedCount === 0;
   const showLivePanel =
@@ -670,7 +693,7 @@ export default function Home() {
         : item.error?.includes("not found")
           ? "Skipped"
           : "Failed",
-      item.error ?? "",
+      formatDispatchReason(item.error),
     ]);
     const csv = [header, ...rows]
       .map((row) =>
@@ -885,7 +908,7 @@ export default function Home() {
       >
         <header className="flex flex-col gap-3">
           <h1 className="text-2xl font-display font-semibold tracking-tight text-slate-900 sm:text-3xl">
-            Automate Payflow uploads & dispatch
+            Nippon Toyota payroll dispatch desk
           </h1>
           {/* Steps moved to Landing component to keep layout consistent */}
         </header>
@@ -1118,9 +1141,9 @@ export default function Home() {
           {preview && preview.totalRows > MAX_ROWS_PER_BATCH && (
             <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 shadow-sm lg:col-span-full">
               <span className="font-semibold">Large file detected.</span> Due
-              to current Next.js processing constraints, uploads are handled in
-              batches of 20 rows. Use the batch selector below to review or
-              dispatch the 1st, 2nd, 3rd, or remaining rows.
+              to office review workflow, uploads are handled in batches of 20
+              rows. Use the batch selector below to review or release each
+              batch in order.
             </div>
           )}
 

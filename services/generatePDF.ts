@@ -88,8 +88,8 @@ async function buildBrandedPdf({
 
   y = height - headerBarHeight - 30;
 
-  // "SALARY SLIP" subtitle
-  page.drawText("SALARY SLIP", {
+  // Salary slip office subtitle
+  page.drawText("SALARY SLIP DISPATCH OFFICE", {
     x: margin,
     y,
     size: 16,
@@ -100,7 +100,7 @@ async function buildBrandedPdf({
   y -= 22;
 
   // Month/Year
-  const monthYearText = `For the month of ${formatMonthYear(salaryRecord.month, salaryRecord.year)}`;
+  const monthYearText = `Payroll period: ${formatMonthYear(salaryRecord.month, salaryRecord.year)}`;
   page.drawText(monthYearText, {
     x: margin,
     y,
@@ -376,7 +376,7 @@ async function buildBrandedPdf({
     color: grayText,
   });
 
-  page.drawText("Authorized Signatory", {
+  page.drawText("Authorized Payroll Officer", {
     x: margin,
     y: signatureLineY - 14,
     size: 9,
@@ -387,7 +387,7 @@ async function buildBrandedPdf({
   // Disclaimer
   const disclaimerY = margin + 30;
   page.drawText(
-    "This is a computer-generated document and does not require a physical signature.",
+    "This salary slip is issued by the Nippon Toyota Salary Slip Dispatch Office for official payroll records and does not require a physical signature.",
     {
       x: margin,
       y: disclaimerY,
