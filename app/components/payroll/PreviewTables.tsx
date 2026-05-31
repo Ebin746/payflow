@@ -29,11 +29,10 @@ type SortedRow = {
 type PreviewTablesProps = {
   preview: UploadPreview | null;
   uploadType: UploadType;
+  isLoading: boolean;
   warningCountForPreview: number;
   employeeCount: number;
   totalRows: number;
-  totalBatchCount: number;
-  activeBatchIndex: number;
   isEmployeeLookupLoading: boolean;
   sortedRows: SortedRow[];
   tableColumns: TableColumn[];
@@ -41,7 +40,6 @@ type PreviewTablesProps = {
   employeeLookup: Record<string, EmployeeLookup>;
   missingEmployeeSet: Set<string>;
   validationErrors: Record<number, Record<string, string>>;
-  onBatchChange: (batchIndex: number) => void;
   onSort: (key: string) => void;
   onRemoveRow: (rowIndex: number) => void;
   onEditRow: (rowIndex: number) => void;
@@ -50,11 +48,10 @@ type PreviewTablesProps = {
 export default function PreviewTables({
   preview,
   uploadType,
+  isLoading,
   warningCountForPreview,
   employeeCount,
   totalRows,
-  totalBatchCount,
-  activeBatchIndex,
   isEmployeeLookupLoading,
   sortedRows,
   tableColumns,
@@ -62,7 +59,6 @@ export default function PreviewTables({
   employeeLookup,
   missingEmployeeSet,
   validationErrors,
-  onBatchChange,
   onSort,
   onRemoveRow,
   onEditRow,
@@ -112,14 +108,9 @@ export default function PreviewTables({
                   Showing {employeeCount} of {totalRows} total rows
                 </span>
               )}
-              {totalBatchCount > 1 && (
-                <span className="text-slate-500">
-                  Batch {activeBatchIndex + 1} of {totalBatchCount}
-                </span>
-              )}
-              {totalBatchCount > 1 && (
+              {preview && totalRows > 20 && (
                 <span className="text-amber-700">
-                  Reviewing records in 20-row dispatch sheets
+                  Large uploads are queued automatically through QStash.
                 </span>
               )}
               {uploadType === "salary" && isEmployeeLookupLoading && (
@@ -167,43 +158,41 @@ export default function PreviewTables({
         )}
       </div>
 
-      {preview && totalBatchCount > 1 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
-          <div>
-            <p className="font-semibold">Batch selection</p>
-            <p className="mt-1 text-xs text-amber-800">
-              For dispatch control, uploads are handled in 20-row sheets.
-              Select a sheet to review or release the first 20, second 20,
-              third 20, and any remaining rows.
-            </p>
+      <div className="overflow-hidden rounded-3xl border border-sky-200/80 bg-linear-to-b from-sky-200 to-sky-100 shadow-[0_24px_60px_-48px_rgba(15,23,42,0.06)] min-w-0">
+        {isLoading ? (
+          <div className="flex min-h-[420px] items-center justify-center px-6 py-12">
+            <div className="w-full max-w-2xl rounded-3xl border border-white/70 bg-white/70 px-6 py-8 shadow-lg backdrop-blur">
+              <div className="flex items-center gap-4">
+                <div className="relative flex h-14 w-14 items-center justify-center">
+                  <div className="absolute inset-0 rounded-full border border-sky-200" />
+                  <div className="h-12 w-12 animate-spin rounded-full border-2 border-sky-300 border-t-sky-700" />
+                  <div className="absolute h-5 w-5 animate-pulse rounded-full bg-sky-100" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">
+                    Uploading and parsing
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-slate-900">
+                    Building preview table...
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Please wait while the file is being read and table rows are prepared.
+                  </p>
+                  <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-sky-100">
+                    <div className="h-full w-2/3 animate-pulse rounded-full bg-sky-500" />
+                  </div>
+                </div>
+              </div>
+              <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                <div className="h-16 animate-pulse rounded-2xl bg-slate-100" />
+                <div className="h-16 animate-pulse rounded-2xl bg-slate-100" />
+                <div className="h-16 animate-pulse rounded-2xl bg-slate-100" />
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
-              View
-            </span>
-            <select
-              value={activeBatchIndex}
-              onChange={(event) => onBatchChange(Number(event.target.value))}
-              className="rounded-full border border-amber-200 bg-white px-4 py-2 text-sm font-semibold text-amber-900 shadow-sm focus:border-amber-300 focus:outline-none"
-            >
-              {Array.from({ length: totalBatchCount }, (_, index) => {
-                const start = index * 20 + 1;
-                const end = Math.min(totalRows, start + 19);
-                return (
-                  <option key={`batch-${index}`} value={index}>
-                    {`Rows ${start}-${end}`}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-        </div>
-      )}
-
-      <div className="overflow-hidden rounded-3xl border border-sky-200/80 bg-gradient-to-b from-sky-200 to-sky-100 shadow-[0_24px_60px_-48px_rgba(15,23,42,0.06)] min-w-0">
-        {preview ? (
-          <div className="max-h-[520px] min-w-0">
-            <div className="max-h-[520px] space-y-3 overflow-y-auto px-4 py-4 sm:hidden">
+        ) : preview ? (
+          <div className="max-h-130 min-w-0">
+            <div className="max-h-130 space-y-3 overflow-y-auto px-4 py-4 sm:hidden">
               {uploadType === "salary"
                 ? sortedRows.map((item, rowIndex) => {
                     const employeeId = String(item.row.employee_id ?? "");
@@ -464,15 +453,19 @@ export default function PreviewTables({
                   })}
             </div>
 
-            <div className="hidden max-h-[520px] overflow-x-auto overflow-y-auto sm:block min-w-0 flex justify-center">
+            <div className="hidden max-h-130 min-w-0 overflow-x-auto overflow-y-auto sm:block">
               {uploadType === "salary" ? (
-                <table className="min-w-[1200px] w-max table-auto border-collapse text-left text-xs sm:text-sm">
+                <table className="min-w-[1100px] w-max table-auto border-collapse text-left text-xs sm:text-sm">
                   <thead className="sticky top-0 bg-sky-200 text-[11px] uppercase tracking-wide text-slate-500">
                     <tr>
                       {tableColumns.map((column) => (
                         <th
                           key={column.key}
-                          className="border-b border-sky-200/80 px-3 py-2 font-semibold sm:px-4 sm:py-3"
+                          className={`border-b border-sky-200/80 px-3 py-2 font-semibold sm:px-4 sm:py-3 ${
+                            column.key === "employee_id"
+                              ? "sticky left-0 z-30 bg-sky-200 shadow-[8px_0_18px_-18px_rgba(15,23,42,0.7)]"
+                              : ""
+                          }`}
                         >
                           <button
                             type="button"
@@ -543,8 +536,12 @@ export default function PreviewTables({
                                 ? "bg-emerald-50/60 text-emerald-800"
                                 : "text-slate-700";
                             const responsiveCellClass = isTextColumn
-                              ? "whitespace-normal break-words"
+                              ? "whitespace-normal wrap-break-word"
                               : "whitespace-nowrap";
+                            const stickyColumnClass =
+                              column.key === "employee_id"
+                                ? "sticky left-0 z-20 bg-inherit shadow-[8px_0_18px_-18px_rgba(15,23,42,0.55)]"
+                                : "";
 
                             const errorText = getCellError(
                               item.index,
@@ -553,7 +550,7 @@ export default function PreviewTables({
                             return (
                               <td
                                 key={`${rowIndex}-${column.key}`}
-                                className={`border-b border-sky-200/80 px-3 py-2 sm:px-4 sm:py-3 ${cellClass} ${responsiveCellClass}`}
+                                className={`border-b border-sky-200/80 px-3 py-2 sm:px-4 sm:py-3 ${cellClass} ${responsiveCellClass} ${stickyColumnClass}`}
                               >
                                 {column.key === "employee_id" ? (
                                   <div className="flex items-center gap-2">
@@ -683,7 +680,7 @@ export default function PreviewTables({
                                 key={`${rowIndex}-${column}`}
                                 className="border-b border-sky-200/80 px-3 py-2 text-slate-700 sm:px-4 sm:py-3"
                               >
-                                <span className="block whitespace-normal break-words">
+                                <span className="block whitespace-normal wrap-break-word">
                                   {String(row[column] ?? "")}
                                 </span>
                                 {errorText && (

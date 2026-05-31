@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { dispatchSalaryUpload } from "@/services/dispatchService";
+
+import { createAndQueueDispatchJob } from "@/services/dispatchJobsService";
 
 export async function POST(request: Request) {
   try {
@@ -13,18 +14,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await dispatchSalaryUpload(rows);
-
-    console.log("dispatch result", {
-      matchedEmployees: result.matchedEmployees,
-      salaryRecordsInserted: result.salaryRecordsInserted,
-      resultsCount: result.results.length,
-    });
+    const destinationUrl = new URL("/api/dispatch/worker", request.url).toString();
+    const job = await createAndQueueDispatchJob(rows, destinationUrl);
 
     return NextResponse.json({
-      matchedEmployees: result.matchedEmployees,
-      salaryRecordsInserted: result.salaryRecordsInserted,
-      results: result.results,
+      job,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Dispatch failed";

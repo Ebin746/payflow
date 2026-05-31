@@ -1,3 +1,53 @@
 employee_id,name,email,designation,birth_year
 EMP001,Ebin Amson,ebinamson223@gmail.com,Software Engineer,1998
 EMP002,Aarav Nair,aarav.nair@example.com,Frontend Developer,1997
+EMP003,Meera Iyer,meera.iyer@example.com,Product Designer,1996
+EMP004,Rohan Kapoor,rohan.kapoor@example.com,QA Engineer,1995
+EMP005,Sana Khan,sana.khan@example.com,DevOps Engineer,1994
+EMP006,Arjun Menon,arjun.menon@example.com,Data Analyst,1997
+EMP007,Priya Das,priya.das@example.com,Backend Developer,1993
+EMP008,Vikram Rao,vikram.rao@example.com,HR Specialist,1992
+EMP009,Nisha Patel,nisha.patel@example.com,Operations Lead,1991
+EMP010,Karan Verma,karan.verma@example.com,Mobile Developer,1996
+EMP011,Ananya Bose,ananya.bose@example.com,Finance Associate,1998
+EMP012,Deepak Sharma,deepak.sharma@example.com,Support Engineer,1990
+EMP013,Farhan Ali,farhan.ali@example.com,Security Analyst,1994
+EMP014,Neha Singh,neha.singh@example.com,Project Coordinator,1995
+EMP015,Imran Sheikh,imran.sheikh@example.com,UI Engineer,1997
+EMP016,Pooja Nair,pooja.nair@example.com,Product Manager,1991
+EMP017,Siddharth Jain,siddharth.jain@example.com,Data Engineer,1993
+EMP018,Ritika Gupta,ritika.gupta@example.com,QA Analyst,1996
+EMP019,Aditya Kulkarni,aditya.k@example.com,Frontend Engineer,1992
+EMP020,Kavya Reddy,kavya.reddy@example.com,Payroll Specialist,1994
+EMP021,Manish Yadav,manish.yadav@example.com,Backend Engineer,1990
+EMP022,Swati Malhotra,swati.malhotra@example.com,HR Manager,1989
+EMP023,Nikhil Saha,nikhil.saha@example.com,Cloud Engineer,1995
+EMP024,Tanya Choudhary,tanya.choudhary@example.com,Business Analyst,1996
+EMP025,Harsh Mehta,harsh.mehta@example.com,Support Lead,1992
+EMP026,Ishita Roy,ishita.roy@example.com,Marketing Executive,1998
+EMP027,Rahul Bose,rahul.bose@example.com,Full Stack Developer,1993
+EMP028,Divya Menon,divya.menon@example.com,Content Strategist,1997
+EMP029,Akash Pillai,akash.pillai@example.com,Database Administrator,1991
+EMP030,Mehul Chawla,mehul.chawla@example.com,Technical Writer,1994
+EMP031,Anita Rao,anita.rao@example.com,Scrum Master,1990
+EMP032,Rajesh Iyer,rajesh.iyer@example.com,Site Reliability Engineer,1992
+EMP033,Simran Kaur,simran.kaur@example.com,Graphic Designer,1995
+EMP034,Gaurav Mishra,gaurav.mishra@example.com,ERP Consultant,1993
+EMP035,Preeti Sharma,preeti.sharma@example.com,Operations Analyst,1996
+EMP036,Varun Nair,varun.nair@example.com,Integration Engineer,1991
+EMP037,Lakshmi Devi,lakshmi.devi@example.com,Procurement Specialist,1994
+EMP038,Mohit Agarwal,mohit.agarwal@example.com,Network Engineer,1992
+EMP039,Sneha Kapoor,sneha.kapoor@example.com,Research Analyst,1997
+EMP040,Abhishek Jain,abhishek.jain@example.com,Customer Success Manager,1990
+EMP041,Neelam Verma,neelam.verma@example.com,Release Manager,1989
+EMP042,Chirag Desai,chirag.desai@example.com,Platform Engineer,1993
+EMP043,Pallavi Das,pallavi.das@example.com,QA Lead,1996
+EMP044,Arun Kumar,arun.kumar@example.com,Database Engineer,1991
+EMP045,Shreya Sinha,shreya.sinha@example.com,Product Analyst,1995
+EMP046,Sunil Joshi,sunil.joshi@example.com,Technical Support,1992
+EMP047,Monika Patil,monika.patil@example.com,Implementation Consultant,1994
+EMP048,Devendra Singh,devendra.singh@example.com,Security Engineer,1990
+EMP049,Ira Shah,ira.shah@example.com,Data Scientist,1997
+EMP050,Kunal Mehta,kunal.mehta@example.com,Operations Manager,1991
+EMP051,Rhea Bansal,rhea.bansal@example.com,Platform Analyst,1998
+EMP052,Suresh Nambiar,suresh.nambiar@example.com,Infrastructure Lead,1988

@@ -9,7 +9,7 @@ Payflow Console is a web application for employee salary slip automation. It let
 - Validate required columns and highlight missing or invalid values early.
 - Generate professional salary slip PDFs for each employee.
 - Send salary slips automatically by email and monitor live dispatch status.
-- Stream live dispatch progress with Server-Sent Events (SSE).
+- Queue salary dispatch jobs through QStash and monitor job status from the dashboard.
 - Edit rows and columns directly in the preview table before dispatching.
 
 ## Tech Stack
@@ -94,6 +94,10 @@ GMAIL_USER=
 GMAIL_APP_PASSWORD=
 EMAIL_FROM=
 COMPANY_NAME=
+
+QSTASH_TOKEN=
+QSTASH_CURRENT_SIGNING_KEY=
+QSTASH_NEXT_SIGNING_KEY=
 ```
 
 Fill in all required values before running the app.
@@ -181,7 +185,7 @@ The Supabase database must also be created separately by running `supabase/schem
 - The app uses Supabase for structured data storage.
 - Salary slips are generated dynamically and emailed to each employee as PDF attachments.
 - Live dispatch monitoring helps the admin track progress, success, and failure status during processing.
-- The dispatch UI uses SSE so the admin can see live status updates while processing runs.
+- The dispatch UI polls the job status endpoint so the admin can see live send/fail updates while processing runs.
 - Uploaded rows can be edited in the preview grid before final confirmation.
 
 ## Database Tables
@@ -264,22 +268,26 @@ Payflow uses a small set of focused API routes to keep the upload and dispatch f
 
 ### `POST /api/dispatch`
 
-- Dispatches salary rows and returns the final dispatch result in JSON.
-- Used when a non-streaming dispatch response is needed.
-- Returns matched employees, inserted salary records, and row-level results.
+- Creates a salary dispatch job, stores it, and pushes it to QStash.
+- Used by the UI to start queued payroll processing.
+- Returns a job snapshot with queued/processing/completed state and row-level results.
 
-### `POST /api/dispatch/stream`
+### `GET /api/dispatch/[jobId]`
 
-- Streams dispatch progress as Server-Sent Events (SSE).
-- Sends live `init`, `progress`, `complete`, and `error` events.
-- Used by the UI to show real-time salary dispatch monitoring while emails and PDFs are processed.
+- Fetches the current job snapshot for polling.
+- Used by the UI to show live queued-job progress.
+
+### `POST /api/dispatch/worker`
+
+- Receives QStash callbacks for queued dispatch jobs.
+- Processes the next salary batch, updates the job, and requeues itself if more rows remain.
 
 ### How the APIs Work Together
 
 1. The user uploads a file through `POST /api/upload`.
 2. The UI validates employee IDs with `POST /api/employees/validate` and enriches rows with `POST /api/employees/lookup` when needed.
 3. Employee master uploads are saved through `POST /api/employees`.
-4. Salary dispatch uses `POST /api/dispatch/stream` for live monitoring, or `POST /api/dispatch` for a standard JSON response.
+4. Salary dispatch uses `POST /api/dispatch` to create a queued job, then polls `GET /api/dispatch/[jobId]` while QStash calls `POST /api/dispatch/worker`.
 
 ## Future Enhancements
 

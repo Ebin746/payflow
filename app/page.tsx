@@ -9,31 +9,19 @@ import PreviewTables from "@/app/components/payroll/PreviewTables";
 import RowEditModal from "@/app/components/payroll/RowEditModal";
 import Landing from "@/app/components/Landing";
 
+import type {
+  DispatchJobSnapshot,
+  DispatchProgress,
+  DispatchResultItem,
+} from "@/lib/dispatch";
+
 type UploadPreview = {
   columns: string[];
   rows: Record<string, string | number | boolean | null>[];
   totalRows: number;
 };
 
-type DispatchResultItem = {
-  employee_id: string;
-  name: string;
-  email: string;
-  month: number;
-  year: number;
-  success: boolean;
-  error?: string;
-};
-
 type UploadType = "salary" | "employees";
-
-type DispatchProgress = {
-  total: number;
-  processed: number;
-  success: number;
-  failed: number;
-  skipped: number;
-};
 
 type EmployeeLookup = {
   name: string;
@@ -112,8 +100,6 @@ const TABLE_COLUMNS = [
   { key: "year", label: "Year" },
 ];
 
-const MAX_ROWS_PER_BATCH = 20;
-
 type SortState = {
   key: string;
   direction: "asc" | "desc";
@@ -154,11 +140,6 @@ function parseNumber(value: unknown) {
     return Number.isNaN(parsed) ? null : parsed;
   }
   return null;
-}
-
-function getBatchRows<T>(rows: T[], batchIndex: number, batchSize: number) {
-  const start = batchIndex * batchSize;
-  return rows.slice(start, start + batchSize);
 }
 
 function validateRows(
@@ -269,7 +250,6 @@ export default function Home() {
     skipped: 0,
   });
   const [editRowIndex, setEditRowIndex] = useState<number | null>(null);
-  const [selectedBatchIndex, setSelectedBatchIndex] = useState(0);
   const [revealedCount, setRevealedCount] = useState(0);
   const [showEmployeeSuccessTick, setShowEmployeeSuccessTick] = useState(false);
   const [sortState, setSortState] = useState<SortState>({
@@ -284,28 +264,7 @@ export default function Home() {
 
   const sampleCsv = useMemo(() => SAMPLE_CSV_FILES[uploadType], [uploadType]);
 
-  const totalBatchCount = preview
-    ? Math.max(1, Math.ceil(preview.totalRows / MAX_ROWS_PER_BATCH))
-    : 0;
-  const activeBatchIndex =
-    preview && totalBatchCount > 0
-      ? Math.min(selectedBatchIndex, totalBatchCount - 1)
-      : 0;
-  const activeBatchRows = useMemo(() => {
-    if (!preview) {
-      return [];
-    }
-    return getBatchRows(preview.rows, activeBatchIndex, MAX_ROWS_PER_BATCH);
-  }, [activeBatchIndex, preview]);
-  const activePreview = useMemo(() => {
-    if (!preview) {
-      return null;
-    }
-    return {
-      ...preview,
-      rows: activeBatchRows,
-    };
-  }, [activeBatchRows, preview]);
+  const activePreview = useMemo(() => preview, [preview]);
 
   async function fetchEmployeeLookup(employeeIds: string[]) {
     if (employeeIds.length === 0) {
@@ -362,7 +321,6 @@ export default function Home() {
       skipped: 0,
     });
     setEditRowIndex(null);
-    setSelectedBatchIndex(0);
     setRevealedCount(0);
     setIsLoading(true);
 
@@ -388,7 +346,6 @@ export default function Home() {
       const previewPayload = payload as UploadPreview;
 
       setPreview(previewPayload);
-      setSelectedBatchIndex(0);
 
       const missing = requiredColumns.filter(
         (column) => !previewPayload.columns.includes(column)
@@ -396,12 +353,7 @@ export default function Home() {
       setMissingColumns(missing);
 
       if (missing.length === 0 && uploadType === "salary") {
-        const initialBatchRows = getBatchRows(
-          previewPayload.rows,
-          0,
-          MAX_ROWS_PER_BATCH
-        );
-        const employeeIds = initialBatchRows
+        const employeeIds = previewPayload.rows
           .map((row) => String(row.employee_id ?? "").trim())
           .filter(Boolean);
 
@@ -479,109 +431,80 @@ export default function Home() {
         return;
       }
 
-      const response = await fetch("/api/dispatch/stream", {
+      const response = await fetch("/api/dispatch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rows: activePreview.rows }),
       });
 
-      if (!response.ok || !response.body) {
-        const payload = (await response.json()) as { error?: string };
-        throw new Error(payload.error ?? "Dispatch failed");
+      const payload = (await response.json()) as
+        | { job?: DispatchJobSnapshot }
+        | { error?: string };
+
+      if (!response.ok || !payload || !("job" in payload) || !payload.job) {
+        const message = "error" in payload ? payload.error : "Dispatch failed";
+        throw new Error(message ?? "Dispatch failed");
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      const handleEvent = (rawEvent: string) => {
-        if (!rawEvent.trim()) {
-          return;
-        }
-
-        let eventName = "message";
-        const dataLines: string[] = [];
-
-        rawEvent.split("\n").forEach((line) => {
-          if (line.startsWith("event:")) {
-            eventName = line.slice(6).trim();
-          }
-          if (line.startsWith("data:")) {
-            dataLines.push(line.slice(5).trim());
-          }
+      const syncDispatchSnapshot = (job: DispatchJobSnapshot) => {
+        setDispatchResults(job.results);
+        setDispatchProgress({
+          total: job.totalRows,
+          processed: job.processedRows,
+          success: job.successRows,
+          failed: job.failedRows,
+          skipped: job.skippedRows,
         });
 
-        const dataText = dataLines.join("\n");
-        if (!dataText) {
-          return;
-        }
-
-        let payload: Record<string, unknown> = {};
-        try {
-          payload = JSON.parse(dataText) as Record<string, unknown>;
-        } catch {
-          return;
-        }
-
-        if (eventName === "init") {
-          setDispatchProgress((current) => ({
-            ...current,
-            total: Number(payload.total ?? current.total),
-          }));
-          return;
-        }
-
-        if (eventName === "progress") {
-          const result = payload.result as DispatchResultItem | undefined;
-          const processed = Number(payload.processed ?? 0);
-          if (result) {
-            setDispatchResults((current) => [...current, result]);
-            setDispatchProgress((current) => {
-              const isSkipped = !result.success && isMissingRecordReason(result.error);
-              return {
-                ...current,
-                processed,
-                success: current.success + (result.success ? 1 : 0),
-                failed:
-                  current.failed + (!result.success && !isSkipped ? 1 : 0),
-                skipped: current.skipped + (isSkipped ? 1 : 0),
-              };
-            });
-          }
-          return;
-        }
-
-        if (eventName === "complete") {
-          const successCount = Number(payload.successCount ?? 0);
-          const failedCount = Number(payload.failedCount ?? 0);
+        if (job.status === "completed") {
           setDispatchMessage(
-            `Dispatch complete. ${successCount} sent, ${failedCount} failed.`
+            `Dispatch complete. ${job.successRows} sent, ${job.failedRows} failed.`
           );
           return;
         }
 
-        if (eventName === "error") {
-          const message =
-            typeof payload.message === "string"
-              ? payload.message
-              : "Dispatch failed";
-          setDispatchMessage(message);
+        if (job.status === "failed") {
+          setDispatchMessage(job.errorMessage ?? "Dispatch failed");
+          return;
         }
+
+        setDispatchMessage("Dispatch queued. QStash is processing the batches.");
       };
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) {
-          break;
-        }
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-        parts.forEach(handleEvent);
-      }
+      syncDispatchSnapshot(payload.job);
 
-      if (buffer.trim()) {
-        handleEvent(buffer);
+      if (
+        payload.job.status === "queued" ||
+        payload.job.status === "processing"
+      ) {
+        while (true) {
+          await new Promise((resolve) => window.setTimeout(resolve, 1500));
+
+          const jobResponse = await fetch(`/api/dispatch/${payload.job.id}`);
+          const jobPayload = (await jobResponse.json()) as
+            | { job?: DispatchJobSnapshot }
+            | { error?: string };
+
+          if (
+            !jobResponse.ok ||
+            !jobPayload ||
+            !("job" in jobPayload) ||
+            !jobPayload.job
+          ) {
+            const message =
+              "error" in jobPayload ? jobPayload.error : "Dispatch failed";
+            throw new Error(message ?? "Dispatch failed");
+          }
+
+          syncDispatchSnapshot(jobPayload.job);
+
+          if (
+            jobPayload.job.status === "completed" ||
+            jobPayload.job.status === "failed"
+          ) {
+            break;
+          }
+        }
       }
 
     } catch (error) {
@@ -627,7 +550,6 @@ export default function Home() {
     setRevealedCount(0);
     setShowEmployeeSuccessTick(false);
     setEditRowIndex(null);
-    setSelectedBatchIndex(0);
     setIsLoading(false);
     setIsDispatching(false);
     setShowConfirmModal(false);
@@ -657,8 +579,7 @@ export default function Home() {
     (item) => !item.success && isMissingRecordReason(item.error)
   ).length;
   const allSent = totalResults > 0 && failedCount === 0;
-  const showLivePanel =
-    uploadType === "salary" && !isDispatching && dispatchResults.length > 0;
+  const showLivePanel = uploadType === "salary" && dispatchResults.length > 0;
   const progressPercent =
     dispatchProgress.total === 0
       ? 0
@@ -812,13 +733,12 @@ export default function Home() {
   }, [activePreview, sortState, employeeLookup]);
 
   function handleRemoveRow(rowIndex: number) {
-    const globalRowIndex = activeBatchIndex * MAX_ROWS_PER_BATCH + rowIndex;
     setPreview((current) => {
       if (!current) {
         return current;
       }
       const nextRows = current.rows.filter(
-        (_, index) => index !== globalRowIndex
+        (_, index) => index !== rowIndex
       );
       setDispatchLocked(false);
       return { ...current, rows: nextRows, totalRows: nextRows.length };
@@ -833,13 +753,12 @@ export default function Home() {
     rowIndex: number,
     updatedRow: Record<string, string>
   ) {
-    const globalRowIndex = activeBatchIndex * MAX_ROWS_PER_BATCH + rowIndex;
     setPreview((current) => {
       if (!current) {
         return current;
       }
       const nextRows = current.rows.map((row, index) => {
-        if (index !== globalRowIndex) {
+        if (index !== rowIndex) {
           return row;
         }
         return { ...row, ...updatedRow };
@@ -868,8 +787,8 @@ export default function Home() {
 
   useEffect(() => {
     if (dispatchResults.length === 0) {
-      setRevealedCount(0);
-      return;
+      const timeoutId = window.setTimeout(() => setRevealedCount(0), 0);
+      return () => window.clearTimeout(timeoutId);
     }
 
     const intervalId = window.setInterval(() => {
@@ -899,7 +818,7 @@ export default function Home() {
   }, [showEmployeeSuccessTick]);
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(252,252,250,1)_0%,_rgba(240,243,248,1)_45%,_rgba(230,236,244,1)_100%)]">
+    <div className="min-h-screen bg-[#f6f8fc]">
       <Landing previewRef={previewRef} />
       <div
         className={`mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-12 lg:px-10 overflow-x-hidden ${
@@ -1138,18 +1057,10 @@ export default function Home() {
               : "lg:grid-cols-1"
           }`}
         >
-          {preview && preview.totalRows > MAX_ROWS_PER_BATCH && (
-            <div className="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 shadow-sm lg:col-span-full">
-              <span className="font-semibold">Large file detected.</span> Due
-              to office review workflow, uploads are handled in batches of 20
-              rows. Use the batch selector below to review or release each
-              batch in order.
-            </div>
-          )}
-
           <PreviewTables
             preview={activePreview}
             uploadType={uploadType}
+            isLoading={isLoading}
             warningCountForPreview={warningCountForPreview}
             employeeCount={employeeCount}
             isEmployeeLookupLoading={isEmployeeLookupLoading}
@@ -1160,22 +1071,6 @@ export default function Home() {
             missingEmployeeSet={missingEmployeeSet}
             validationErrors={validationErrors}
             totalRows={preview?.totalRows ?? 0}
-            totalBatchCount={totalBatchCount}
-            activeBatchIndex={activeBatchIndex}
-            onBatchChange={(nextBatchIndex) => {
-              setSelectedBatchIndex(nextBatchIndex);
-              setEditRowIndex(null);
-              setDispatchMessage(null);
-              setDispatchResults([]);
-              setDispatchProgress({
-                total: 0,
-                processed: 0,
-                success: 0,
-                failed: 0,
-                skipped: 0,
-              });
-              setDispatchLocked(false);
-            }}
             onSort={handleSort}
             onRemoveRow={handleRemoveRow}
             onEditRow={handleEditRow}
@@ -1242,7 +1137,7 @@ export default function Home() {
       {isDispatching &&
         (uploadType === "employees" ? (
           <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/8">
-            <div className="w-[420px] rounded-xl border border-sky-100 bg-gradient-to-b from-white to-sky-50 px-4 py-3 text-sm text-slate-700 shadow-lg">
+            <div className="w-105 rounded-xl border border-sky-100 bg-linear-to-b from-white to-sky-50 px-4 py-3 text-sm text-slate-700 shadow-lg">
               <div className="flex items-center gap-4">
                 <div className="flex-1">
                   <p className="text-xs font-semibold text-slate-600">Saving employees</p>
@@ -1259,7 +1154,7 @@ export default function Home() {
           </div>
         ) : (
           <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/15">
-            <div className="w-[300px] rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700 shadow-lg">
+            <div className="w-75 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700 shadow-lg">
               <div className="flex items-center gap-3">
                 <div className="relative flex h-9 w-9 items-center justify-center">
                   <div className="absolute h-full w-full rounded-full border border-slate-200" />
@@ -1281,7 +1176,7 @@ export default function Home() {
                     className="h-full rounded-full bg-slate-900 transition-all duration-300"
                     style={{ width: `${progressPercent}%` }}
                   />
-                  <div className="-mt-2 h-2 w-full animate-pulse bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+                  <div className="-mt-2 h-2 w-full animate-pulse bg-linear-to-r from-transparent via-white/60 to-transparent" />
                 </div>
                 <p className="mt-2 text-[11px] text-slate-500">
                   {dispatchProgress.processed}/{dispatchProgress.total} processed
@@ -1306,8 +1201,8 @@ export default function Home() {
         ))}
 
       {showEmployeeSuccessTick && dispatchMessage?.startsWith("Employee upload complete") && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/10 px-6">
-          <div className="w-full max-w-md rounded-3xl border border-emerald-200 bg-white p-6 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.7)]">
+        <div className="pointer-events-none fixed right-6 top-6 z-40 px-6">
+          <div className="pointer-events-auto w-full max-w-md rounded-3xl border border-emerald-200 bg-white p-6 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.7)]">
             <div className="flex items-center gap-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-inner animate-pulse">
                 <svg

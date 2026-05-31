@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",
+    "@upstash/qstash": "^2.11.0",
     "muhammara": "^6.0.5",
     "next": "16.2.6",
     "nodemailer": "^6.10.1",
