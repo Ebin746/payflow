@@ -1,6 +1,6 @@
 # Payflow Console
 
-Payflow Console is a web application for employee salary slip automation. It lets an admin upload employee master data and monthly payroll files in CSV or Excel format, preview and validate the records, generate salary slip PDFs, and email each employee their slip automatically. The app also includes live dispatch status monitoring so the admin can track the progress of each run.
+Payflow Console is a web application for employee salary slip automation. It lets an admin upload employee master data and monthly payroll files in CSV or Excel format, preview and validate the records, queue salary dispatch jobs, generate salary slip PDFs, and email each employee their slip automatically. The app also includes live dispatch status monitoring so the admin can track the progress of each run.
 
 ## Features
 
@@ -10,6 +10,7 @@ Payflow Console is a web application for employee salary slip automation. It let
 - Generate professional salary slip PDFs for each employee.
 - Send salary slips automatically by email and monitor live dispatch status.
 - Queue salary dispatch jobs through QStash and monitor job status from the dashboard.
+- Persist every salary dispatch run in Supabase so large batches can be processed safely and resumed from the job table.
 - Edit rows and columns directly in the preview table before dispatching.
 
 ## Tech Stack
@@ -19,6 +20,7 @@ Payflow Console is a web application for employee salary slip automation. It let
 - TypeScript
 - Tailwind CSS
 - Supabase
+- Upstash Redis + QStash
 - Nodemailer
 - PDF generation with muhammara and pdf-lib
 - XLSX parsing for spreadsheet uploads
@@ -57,6 +59,21 @@ payflow/
 	└── screenshots/
 ```
 
+## Processing Flow
+
+Payroll dispatch now runs as a queued background workflow instead of a single blocking request:
+
+1. Upload the salary CSV or Excel file through the UI.
+2. Parse and validate the rows, then preview the data in the browser.
+3. Store the uploaded rows in Supabase through the dispatch job record.
+4. Create a `dispatch_jobs` row and enqueue the job through QStash.
+5. QStash calls `POST /api/dispatch/worker` to process the next batch.
+6. The worker looks up employees, generates the PDF, sends the email, and writes successful salary rows into `salary_records`.
+7. The worker updates job counters and requeues itself until every batch is complete.
+8. The UI polls `GET /api/dispatch/[jobId]` so the admin sees live progress, success, and failure counts.
+
+This design keeps the browser responsive while long-running payroll jobs continue in the background.
+
 ## Local Installation
 
 ### Prerequisites
@@ -90,17 +107,25 @@ SUPABASE_URL=
 SUPABASE_PUBLISHABLE_KEY=
 SUPABASE_SECRET_KEY=
 
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+
 GMAIL_USER=
 GMAIL_APP_PASSWORD=
 EMAIL_FROM=
 COMPANY_NAME=
 
 QSTASH_TOKEN=
+QSTASH_URL=
 QSTASH_CURRENT_SIGNING_KEY=
 QSTASH_NEXT_SIGNING_KEY=
 ```
 
 Fill in all required values before running the app.
+
+For local QStash testing, set `QSTASH_URL=http://127.0.0.1:8080` and keep the local-mode token and signing keys from the Upstash local mode console.
+
+If you run the queued dispatch flow locally, make sure the Upstash Redis REST URL and token are also configured so QStash can publish and replay the job callbacks.
 
 ### 4. Set up the database
 
@@ -108,7 +133,8 @@ Fill in all required values before running the app.
 2. Open the Supabase SQL editor.
 3. Run the SQL file at `supabase/schema.sql` to create the required tables:
    - `employees`
-   - `salary_records`
+	- `salary_records`
+	- `dispatch_jobs`
 
 ### 5. Start the development server
 
@@ -188,9 +214,17 @@ The Supabase database must also be created separately by running `supabase/schem
 - The dispatch UI polls the job status endpoint so the admin can see live send/fail updates while processing runs.
 - Uploaded rows can be edited in the preview grid before final confirmation.
 
+## Scalability Highlights
+
+- Queue-backed processing keeps the UI responsive even for large payroll runs.
+- QStash offloads worker execution so batches can be retried and continued without blocking the request thread.
+- The `dispatch_jobs` table stores job state, counters, results, timestamps, and error messages for reliable auditability.
+- Redis-backed queue delivery and batch processing make it practical to handle hundreds of emails in a single run.
+- The live polling dashboard gives visibility without tying processing to the client session.
+
 ## Database Tables
 
-Payflow uses two main tables in Supabase:
+Payflow uses three main tables in Supabase:
 
 ### `employees`
 
@@ -220,6 +254,28 @@ Stores the monthly salary information that is used to generate the PDF slip and 
 | `year` | `int` | Payroll year. |
 | `net_salary` | `numeric(12, 2)` | Final calculated salary amount. |
 
+### `dispatch_jobs`
+
+Stores each queued payroll run and the live counters used by the dashboard.
+
+| Column | Type | Description |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. Generated for every queued dispatch job. |
+| `upload_type` | `text` | Job type. Currently set to `salary`. |
+| `status` | `text` | Queue state: `queued`, `processing`, `completed`, or `failed`. |
+| `total_rows` | `int` | Total number of rows submitted for dispatch. |
+| `processed_rows` | `int` | Number of rows already handled by the worker. |
+| `success_rows` | `int` | Number of successful sends. |
+| `failed_rows` | `int` | Number of failed sends. |
+| `skipped_rows` | `int` | Number of skipped rows that could not be processed. |
+| `rows` | `jsonb` | Raw uploaded rows stored with the job. |
+| `results` | `jsonb` | Row-level live results returned by the worker. |
+| `error_message` | `text` | Last error message when the job fails. |
+| `created_at` | `timestamptz` | Time the job was created. |
+| `updated_at` | `timestamptz` | Time the job was last updated. |
+| `started_at` | `timestamptz` | Time processing started. |
+| `completed_at` | `timestamptz` | Time processing completed. |
+
 ### Relationships
 
 - `employees.employee_id` is the primary key for the employee master table.
@@ -227,6 +283,8 @@ Stores the monthly salary information that is used to generate the PDF slip and 
 - This relationship ensures that every salary record belongs to a valid employee.
 - The app uses `employee_id` to look up employee details when processing monthly salary uploads.
 - Deleting an employee is restricted if salary records already exist for that employee.
+- `dispatch_jobs.rows` stores the uploaded payload that the queue worker processes in batches.
+- `dispatch_jobs.results` stores the row-level processing history shown in the live dashboard.
 
 ### Salary Calculation
 
@@ -268,7 +326,7 @@ Payflow uses a small set of focused API routes to keep the upload and dispatch f
 
 ### `POST /api/dispatch`
 
-- Creates a salary dispatch job, stores it, and pushes it to QStash.
+- Creates a salary dispatch job, stores the uploaded rows in `dispatch_jobs`, and pushes the job to QStash.
 - Used by the UI to start queued payroll processing.
 - Returns a job snapshot with queued/processing/completed state and row-level results.
 
@@ -276,11 +334,13 @@ Payflow uses a small set of focused API routes to keep the upload and dispatch f
 
 - Fetches the current job snapshot for polling.
 - Used by the UI to show live queued-job progress.
+- Exposes counters for processed, successful, failed, and skipped rows.
 
 ### `POST /api/dispatch/worker`
 
 - Receives QStash callbacks for queued dispatch jobs.
 - Processes the next salary batch, updates the job, and requeues itself if more rows remain.
+- Generates PDFs, sends emails, inserts successful salary rows, and updates the job counters in Supabase.
 
 ### How the APIs Work Together
 
@@ -288,14 +348,12 @@ Payflow uses a small set of focused API routes to keep the upload and dispatch f
 2. The UI validates employee IDs with `POST /api/employees/validate` and enriches rows with `POST /api/employees/lookup` when needed.
 3. Employee master uploads are saved through `POST /api/employees`.
 4. Salary dispatch uses `POST /api/dispatch` to create a queued job, then polls `GET /api/dispatch/[jobId]` while QStash calls `POST /api/dispatch/worker`.
+5. The worker batch-processes the payload until the job is marked completed or failed.
 
 ## Future Enhancements
 
 Planned improvements for scaling and reliability:
 
-- Batch processing for large payroll files.
-- Background job processing for PDF generation and email dispatch.
-- Queue-based worker execution to support higher volume usage.
 - Better retry handling and failure recovery for email delivery.
 - More detailed audit logs for admin actions and dispatch history.
 

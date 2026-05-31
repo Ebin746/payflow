@@ -1,4 +1,4 @@
-import { forwardRef, useMemo, useState } from "react";
+import { forwardRef, useEffect, useMemo, useState } from "react";
 
 type DispatchResultItem = {
   employee_id: string;
@@ -22,10 +22,9 @@ type LiveDispatchPanelProps = {
   revealedCount: number;
   dispatchResults: DispatchResultItem[];
   dispatchProgress: DispatchProgress;
-  progressPercent: number;
+  dispatchMessage: string | null;
   sentCount: number;
   failedCount: number;
-  skippedCount: number;
   allSent: boolean;
   isDispatching: boolean;
   onDownloadReport: () => void;
@@ -38,10 +37,9 @@ const LiveDispatchPanel = forwardRef<HTMLDivElement, LiveDispatchPanelProps>(
       revealedCount,
       dispatchResults,
       dispatchProgress,
-      progressPercent,
+      dispatchMessage,
       sentCount,
       failedCount,
-      skippedCount,
       allSent,
       isDispatching,
       onDownloadReport,
@@ -53,6 +51,47 @@ const LiveDispatchPanel = forwardRef<HTMLDivElement, LiveDispatchPanelProps>(
       "recent" | "status" | "employee_id" | "name"
     >("recent");
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+    const [displayedProcessed, setDisplayedProcessed] = useState(0);
+
+    useEffect(() => {
+      const targetProcessed = dispatchProgress.processed;
+
+      setDisplayedProcessed((current) => {
+        if (targetProcessed < current) {
+          return targetProcessed;
+        }
+        return current;
+      });
+
+      if (targetProcessed === 0) {
+        setDisplayedProcessed(0);
+        return;
+      }
+
+      if (targetProcessed <= displayedProcessed) {
+        return;
+      }
+
+      const intervalId = window.setInterval(() => {
+        setDisplayedProcessed((current) => {
+          if (current >= targetProcessed) {
+            window.clearInterval(intervalId);
+            return targetProcessed;
+          }
+
+          const remaining = targetProcessed - current;
+          const step = Math.max(1, Math.ceil(remaining / 6));
+          return Math.min(current + step, targetProcessed);
+        });
+      }, 45);
+
+      return () => window.clearInterval(intervalId);
+    }, [dispatchProgress.processed, displayedProcessed]);
+
+    const displayedProgressPercent =
+      dispatchProgress.total === 0
+        ? 0
+        : Math.round((displayedProcessed / dispatchProgress.total) * 100);
 
     const visibleResults = useMemo(
       () => dispatchResults.slice(0, revealedCount),
@@ -112,15 +151,20 @@ const LiveDispatchPanel = forwardRef<HTMLDivElement, LiveDispatchPanelProps>(
         <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
           <span>Progress</span>
           <span>
-            {dispatchProgress.processed}/{dispatchProgress.total} · {progressPercent}%
+            {displayedProcessed}/{dispatchProgress.total} · {displayedProgressPercent}%
           </span>
         </div>
         <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
           <div
             className="h-full rounded-full bg-slate-900 transition-all duration-300"
-            style={{ width: `${progressPercent}%` }}
+            style={{ width: `${displayedProgressPercent}%` }}
           />
         </div>
+        {dispatchMessage && (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            {dispatchMessage}
+          </div>
+        )}
       </div>
 
       <div className="grid gap-3">
@@ -138,14 +182,6 @@ const LiveDispatchPanel = forwardRef<HTMLDivElement, LiveDispatchPanelProps>(
           </p>
           <p className="mt-1 text-2xl font-semibold text-rose-700">
             {failedCount}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
-          <p className="text-xs uppercase tracking-[0.2em] text-amber-500">
-            Skipped / Missing Record
-          </p>
-          <p className="mt-1 text-2xl font-semibold text-amber-700">
-            {skippedCount}
           </p>
         </div>
       </div>
@@ -199,18 +235,8 @@ const LiveDispatchPanel = forwardRef<HTMLDivElement, LiveDispatchPanelProps>(
         </div>
         <div className="mt-3 max-h-56 space-y-2 overflow-auto pr-1">
           {sortedResults.map((item, index) => {
-            const isSkipped =
-              !item.success && item.error?.includes("not found");
-            const statusLabel = item.success
-              ? "Sent"
-              : isSkipped
-                ? "Skipped"
-                : "Failed";
-            const statusClass = item.success
-              ? "text-emerald-600"
-              : isSkipped
-                ? "text-amber-600"
-                : "text-rose-600";
+            const statusLabel = item.success ? "Sent" : "Failed";
+            const statusClass = item.success ? "text-emerald-600" : "text-rose-600";
 
             return (
               <div

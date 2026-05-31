@@ -52,10 +52,6 @@ const EMPLOYEE_REQUIRED_COLUMNS = [
   "designation",
 ];
 
-function isMissingRecordReason(reason?: string) {
-  return Boolean(reason && /not found/i.test(reason));
-}
-
 function formatDispatchReason(reason?: string) {
   if (!reason) {
     return "";
@@ -576,11 +572,10 @@ export default function Home() {
   const totalResults = dispatchResults.length;
   const sentCount = dispatchResults.filter((item) => item.success).length;
   const failedCount = dispatchResults.filter((item) => !item.success).length;
-  const skippedCount = dispatchResults.filter(
-    (item) => !item.success && isMissingRecordReason(item.error)
-  ).length;
   const allSent = totalResults > 0 && failedCount === 0;
-  const showLivePanel = uploadType === "salary" && (isDispatching || dispatchResults.length > 0);
+  const showLivePanel =
+    uploadType === "salary" &&
+    (isDispatching || dispatchProgress.total > 0 || dispatchResults.length > 0);
   const progressPercent =
     dispatchProgress.total === 0
       ? 0
@@ -1083,10 +1078,9 @@ export default function Home() {
               revealedCount={revealedCount}
               dispatchResults={dispatchResults}
               dispatchProgress={dispatchProgress}
-              progressPercent={progressPercent}
+              dispatchMessage={dispatchMessage}
               sentCount={sentCount}
               failedCount={failedCount}
-              skippedCount={skippedCount}
               allSent={allSent}
               isDispatching={isDispatching}
               onDownloadReport={handleDownloadReport}
@@ -1191,10 +1185,6 @@ export default function Home() {
                 <div className="flex items-center justify-between rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs">
                   <span className="text-rose-600">Failed</span>
                   <span className="font-semibold text-rose-700">{failedCount}</span>
-                </div>
-                <div className="flex items-center justify-between rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs">
-                  <span className="text-amber-600">Skipped</span>
-                  <span className="font-semibold text-amber-700">{skippedCount}</span>
                 </div>
               </div>
             </div>

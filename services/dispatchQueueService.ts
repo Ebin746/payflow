@@ -1,7 +1,12 @@
-const QSTASH_PUBLISH_URL = "https://qstash.upstash.io/v2/publish";
+const DEFAULT_QSTASH_BASE_URL = "https://qstash.upstash.io";
 
 function getQstashToken() {
   return process.env.QSTASH_TOKEN ?? process.env.UPSTASH_QSTASH_TOKEN ?? "";
+}
+
+function getQstashPublishUrl() {
+  const baseUrl = process.env.QSTASH_URL ?? DEFAULT_QSTASH_BASE_URL;
+  return `${baseUrl.replace(/\/$/, "")}/v2/publish`;
 }
 
 export async function enqueueDispatchJob(jobId: string, destinationUrl: string) {
@@ -15,7 +20,7 @@ export async function enqueueDispatchJob(jobId: string, destinationUrl: string) 
   }
 
   const response = await fetch(
-    `${QSTASH_PUBLISH_URL}/${encodeURIComponent(destinationUrl)}`,
+    `${getQstashPublishUrl()}/${destinationUrl}`,
     {
       method: "POST",
       headers: {
