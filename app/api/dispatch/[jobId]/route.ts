@@ -3,12 +3,12 @@ import { NextResponse } from "next/server";
 import { getDispatchJobSnapshot } from "@/services/dispatchJobsService";
 
 type RouteContext = {
-  params: { jobId: string };
+  params: Promise<{ jobId: string }>;
 };
 
 export async function GET(_: Request, context: RouteContext) {
   try {
-    const { jobId } = context.params;
+    const { jobId } = await context.params;
     const job = await getDispatchJobSnapshot(jobId);
     return NextResponse.json({ job });
   } catch (error) {
