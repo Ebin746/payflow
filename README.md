@@ -330,6 +330,12 @@ What you need to configure:
 
 The production build is compatible with Vercel because the app uses standard Next.js route handlers and server-side code. Use the deployed Vercel URL as the QStash worker destination in production.
 
+## Demo Video
+
+Watch the demo on YouTube: [Demo video](https://youtu.be/ZDIdVrw30XY)
+ 
+Live demo: [https://payflow-console.vercel.app/](https://payflow-console.vercel.app/)
+
 ## Screenshots
 
 ### Home
