@@ -869,11 +869,11 @@ export default function Home() {
                 </h2>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+              <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 sm:px-4 sm:py-4">
+                <p className="text-[11px] uppercase tracking-[0.25em] text-slate-500 sm:text-xs">
                   Upload type
                 </p>
-                <p className="mt-2 text-sm text-slate-600">
+                <p className="mt-2 text-xs text-slate-600 sm:text-sm">
                   Choose what you want to manage in Payflow.
                 </p>
                 <div className="mt-3 flex flex-col gap-2">
@@ -882,26 +882,26 @@ export default function Home() {
                       key={type}
                       type="button"
                       onClick={() => handleUploadTypeChange(type)}
-                      className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm transition ${
+                      className={`flex items-start justify-between gap-3 rounded-2xl border px-3 py-3 text-left text-xs transition sm:px-4 sm:text-sm ${
                         uploadType === type
                           ? "border-slate-900 bg-slate-900 text-white"
                           : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
                       }`}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-start gap-3">
                         <span
-                          className="flex h-8 w-8 items-center justify-center rounded-full bg-black text-xs font-semibold text-white"
+                          className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full bg-black text-[11px] font-semibold text-white sm:h-8 sm:w-8 sm:text-xs"
                         >
                           {type === "employees" ? "1" : "2"}
                         </span>
                         <div className="flex flex-col">
-                          <span className="font-semibold">
+                          <span className="font-semibold leading-tight">
                             {type === "employees"
                               ? "Employee master data"
                               : "Salary dispatch"}
                           </span>
                           <span
-                            className={`text-xs ${
+                            className={`text-[11px] leading-snug sm:text-xs ${
                               uploadType === type
                                 ? "text-slate-200"
                                 : "text-slate-400"
@@ -918,16 +918,16 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 sm:px-4">
                 <div className="text-sm font-semibold text-slate-700">
                   Expected format
                 </div>
-                <div className="mt-3 flex flex-col gap-3 text-sm text-slate-600">
-                  <div className="flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-col gap-3 text-xs text-slate-600 sm:text-sm">
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2">
                     {requiredColumns.map((column) => (
                       <span
                         key={column}
-                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700"
+                        className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700 sm:px-3 sm:text-xs"
                       >
                         {column}
                       </span>
@@ -936,7 +936,7 @@ export default function Home() {
                   <a
                     href={sampleCsv.href}
                     download={sampleCsv.download}
-                    className="relative inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white"
+                    className="relative inline-flex w-full items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white sm:w-auto"
                   >
                     <span className="absolute inset-0 rounded-full bg-slate-900" />
                     <span className="relative">Download sample CSV</span>
