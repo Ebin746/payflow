@@ -43,6 +43,7 @@ The codebase uses a layered structure:
 - lib/ - shared types, helpers, and Supabase client setup
 - supabase/ - SQL schema and DB trigger definitions
 - public/ - sample CSV files and UI screenshots
+- public/sample-csvs/ - downloadable sample CSV templates
 
 ### Directory Layout
 
@@ -68,6 +69,13 @@ payflow/
 	├── sample-csvs/
 	└── screenshots/
 ```
+
+### Sample CSV Downloads
+
+Use these direct links to download the sample files from the README:
+
+- [Employee sample CSV](public/sample-csvs/employees-sample.csv)
+- [Salary records sample CSV](public/sample-csvs/salary-records-sample.csv)
 
 ## Processing Flow
 

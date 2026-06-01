@@ -873,19 +873,19 @@ export default function Home() {
                 <p className="text-[11px] uppercase tracking-[0.25em] text-slate-500 sm:text-xs">
                   Upload type
                 </p>
-                <p className="mt-2 text-xs text-slate-600 sm:text-sm">
-                  Choose what you want to manage in Payflow.
+                <p className="mt-2 text-xs text-slate-800 sm:text-sm">
+                  Pick what you want to upload.
                 </p>
-                <div className="mt-3 flex flex-col gap-2">
+                <div className="mt-3 flex flex-col gap-4">
                   {(["employees", "salary"] as UploadType[]).map((type) => (
                     <button
                       key={type}
                       type="button"
                       onClick={() => handleUploadTypeChange(type)}
-                      className={`flex items-start justify-between gap-3 rounded-2xl border px-3 py-3 text-left text-xs transition sm:px-4 sm:text-sm ${
+                      className={`group flex items-start justify-between gap-3 rounded-2xl border-2 px-3 py-3 text-left text-xs transition shadow-sm sm:px-4 sm:text-sm ${
                         uploadType === type
                           ? "border-slate-900 bg-slate-900 text-white"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                          : "border-slate-300 bg-white text-slate-900 hover:border-slate-500"
                       }`}
                     >
                       <div className="flex items-start gap-3">
@@ -895,21 +895,21 @@ export default function Home() {
                           {type === "employees" ? "1" : "2"}
                         </span>
                         <div className="flex flex-col">
-                          <span className="font-semibold leading-tight">
+                          <span className="whitespace-nowrap font-semibold leading-tight">
                             {type === "employees"
-                              ? "Employee master data"
-                              : "Salary dispatch"}
+                              ? "Employee data upload"
+                              : "Salary details upload"}
                           </span>
                           <span
-                            className={`text-[11px] leading-snug sm:text-xs ${
+                            className={`whitespace-nowrap text-[11px] leading-snug transition-all duration-200 sm:text-xs ${
                               uploadType === type
                                 ? "text-slate-200"
-                                : "text-slate-400"
+                                : "text-slate-700 opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0"
                             }`}
                           >
                             {type === "employees"
-                              ? "Create or update the employee directory once"
-                              : "Upload monthly payroll to generate slips"}
+                              ? "Only one time upload is need"
+                              : "Upload monthly salary details"}
                           </span>
                         </div>
                       </div>
