@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useMemo, useState } from "react";
+import { forwardRef, useMemo, useState } from "react";
 
 type DispatchResultItem = {
   employee_id: string;
@@ -10,18 +10,9 @@ type DispatchResultItem = {
   error?: string;
 };
 
-type DispatchProgress = {
-  total: number;
-  processed: number;
-  success: number;
-  failed: number;
-  skipped: number;
-};
-
 type LiveDispatchPanelProps = {
   revealedCount: number;
   dispatchResults: DispatchResultItem[];
-  dispatchProgress: DispatchProgress;
   dispatchMessage: string | null;
   sentCount: number;
   failedCount: number;
@@ -36,7 +27,6 @@ const LiveDispatchPanel = forwardRef<HTMLDivElement, LiveDispatchPanelProps>(
     {
       revealedCount,
       dispatchResults,
-      dispatchProgress,
       dispatchMessage,
       sentCount,
       failedCount,
@@ -51,47 +41,6 @@ const LiveDispatchPanel = forwardRef<HTMLDivElement, LiveDispatchPanelProps>(
       "recent" | "status" | "employee_id" | "name"
     >("recent");
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-    const [displayedProcessed, setDisplayedProcessed] = useState(0);
-
-    useEffect(() => {
-      const targetProcessed = dispatchProgress.processed;
-
-      setDisplayedProcessed((current) => {
-        if (targetProcessed < current) {
-          return targetProcessed;
-        }
-        return current;
-      });
-
-      if (targetProcessed === 0) {
-        setDisplayedProcessed(0);
-        return;
-      }
-
-      if (targetProcessed <= displayedProcessed) {
-        return;
-      }
-
-      const intervalId = window.setInterval(() => {
-        setDisplayedProcessed((current) => {
-          if (current >= targetProcessed) {
-            window.clearInterval(intervalId);
-            return targetProcessed;
-          }
-
-          const remaining = targetProcessed - current;
-          const step = Math.max(1, Math.ceil(remaining / 6));
-          return Math.min(current + step, targetProcessed);
-        });
-      }, 45);
-
-      return () => window.clearInterval(intervalId);
-    }, [dispatchProgress.processed, displayedProcessed]);
-
-    const displayedProgressPercent =
-      dispatchProgress.total === 0
-        ? 0
-        : Math.round((displayedProcessed / dispatchProgress.total) * 100);
 
     const visibleResults = useMemo(
       () => dispatchResults.slice(0, revealedCount),
@@ -147,25 +96,11 @@ const LiveDispatchPanel = forwardRef<HTMLDivElement, LiveDispatchPanelProps>(
         </span>
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-          <span>Progress</span>
-          <span>
-            {displayedProcessed}/{dispatchProgress.total} · {displayedProgressPercent}%
-          </span>
+      {dispatchMessage && (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          {dispatchMessage}
         </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-          <div
-            className="h-full rounded-full bg-slate-900 transition-all duration-300"
-            style={{ width: `${displayedProgressPercent}%` }}
-          />
-        </div>
-        {dispatchMessage && (
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            {dispatchMessage}
-          </div>
-        )}
-      </div>
+      )}
 
       <div className="grid gap-3">
         <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">

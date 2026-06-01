@@ -918,13 +918,10 @@ export default function Home() {
                 </div>
               </div>
 
-              <details className="group rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-slate-700">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-sm font-semibold text-slate-700">
                   Expected format
-                  <span className="text-slate-400 transition-transform duration-300 group-open:rotate-180">
-                    ▼
-                  </span>
-                </summary>
+                </div>
                 <div className="mt-3 flex flex-col gap-3 text-sm text-slate-600">
                   <div className="flex flex-wrap gap-2">
                     {requiredColumns.map((column) => (
@@ -939,13 +936,16 @@ export default function Home() {
                   <a
                     href={sampleCsv.href}
                     download={sampleCsv.download}
-                    className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900"
+                    className="relative inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white"
                   >
-                    Download sample CSV
-                    <span aria-hidden>→</span>
+                    <span className="absolute inset-0 rounded-full bg-slate-900" />
+                    <span className="relative">Download sample CSV</span>
+                    <span className="relative" aria-hidden>
+                      →
+                    </span>
                   </a>
                 </div>
-              </details>
+              </div>
 
               {/* tip removed per request */}
             </div>
@@ -1077,7 +1077,6 @@ export default function Home() {
               ref={summaryRef}
               revealedCount={revealedCount}
               dispatchResults={dispatchResults}
-              dispatchProgress={dispatchProgress}
               dispatchMessage={dispatchMessage}
               sentCount={sentCount}
               failedCount={failedCount}
@@ -1161,30 +1160,8 @@ export default function Home() {
                     Dispatching
                   </p>
                   <p className="text-sm font-semibold text-slate-700">
-                    Processing... {progressPercent}%
+                    Processing payroll
                   </p>
-                </div>
-              </div>
-              <div className="mt-4">
-                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full bg-slate-900 transition-all duration-300"
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                  <div className="-mt-2 h-2 w-full animate-pulse bg-linear-to-r from-transparent via-white/60 to-transparent" />
-                </div>
-                <p className="mt-2 text-[11px] text-slate-500">
-                  {dispatchProgress.processed}/{dispatchProgress.total} processed
-                </p>
-              </div>
-              <div className="mt-4 grid gap-2">
-                <div className="flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs">
-                  <span className="text-emerald-600">Sent</span>
-                  <span className="font-semibold text-emerald-700">{sentCount}</span>
-                </div>
-                <div className="flex items-center justify-between rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs">
-                  <span className="text-rose-600">Failed</span>
-                  <span className="font-semibold text-rose-700">{failedCount}</span>
                 </div>
               </div>
             </div>
